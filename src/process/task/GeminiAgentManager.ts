@@ -21,6 +21,7 @@ import { ToolConfirmationOutcome } from '../../agent/gemini/cli/tools/tools';
 import { getDatabase } from '@process/database';
 import { addMessage, addOrUpdateMessage, nextTickToLocalFinish } from '../message';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
+import { ConversationTurnCompletionService } from '@process/services/ConversationTurnCompletionService';
 import { handlePreviewOpenEvent } from '../utils/previewUtils';
 import BaseAgentManager from './BaseAgentManager';
 import { hasCronCommands } from './CronCommandDetector';
@@ -610,6 +611,12 @@ export class GeminiAgentManager extends BaseAgentManager<
 
       // Return false if no assistant messages found after timestamp (will trigger retry)
       if (assistantMsgs.length === 0) {
+        const latestCompletedMessage = result.data.find((message) => message.position !== 'right' && (message.createdAt ?? 0) > afterTimestamp);
+        if (latestCompletedMessage) {
+          void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
+          return true;
+        }
+
         return false;
       }
 
@@ -664,6 +671,8 @@ export class GeminiAgentManager extends BaseAgentManager<
           input: feedbackMessage,
           msg_id: uuid(),
         });
+      } else {
+        void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
       }
 
       // Found assistant messages, no need to retry

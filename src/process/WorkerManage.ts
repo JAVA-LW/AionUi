@@ -159,6 +159,54 @@ const getTaskByIdRollbackBuild = async (id: string, options?: BuildConversationO
   return Promise.reject(new Error('Conversation not found'));
 };
 
+type SendMessageResult =
+  | { success: true }
+  | {
+      success: false;
+      msg: string;
+    };
+
+const sendMessage = async (conversationId: string, message: string, msgId: string, files?: string[]): Promise<SendMessageResult> => {
+  let task: AgentBaseTask<unknown>;
+  try {
+    task = await getTaskByIdRollbackBuild(conversationId);
+  } catch (error) {
+    return {
+      success: false,
+      msg: error instanceof Error ? error.message : 'conversation not found',
+    };
+  }
+
+  try {
+    if (task.type === 'gemini') {
+      await (task as GeminiAgentManager).sendMessage({ input: message, msg_id: msgId, files });
+      return { success: true };
+    }
+    if (task.type === 'acp') {
+      await (task as AcpAgentManager).sendMessage({ content: message, msg_id: msgId, files });
+      return { success: true };
+    }
+    if (task.type === 'codex') {
+      await (task as CodexAgentManager).sendMessage({ content: message, msg_id: msgId, files });
+      return { success: true };
+    }
+    if (task.type === 'openclaw-gateway') {
+      await (task as OpenClawAgentManager).sendMessage({ content: message, msg_id: msgId, files });
+      return { success: true };
+    }
+    if (task.type === 'nanobot') {
+      await (task as NanoBotAgentManager).sendMessage({ content: message, msg_id: msgId, files });
+      return { success: true };
+    }
+    return { success: false, msg: `Unsupported task type: ${task.type}` };
+  } catch (error) {
+    return {
+      success: false,
+      msg: error instanceof Error ? error.message : 'Failed to send message',
+    };
+  }
+};
+
 const kill = (id: string) => {
   const index = taskList.findIndex((item) => item.id === id);
   if (index === -1) return;
@@ -193,6 +241,7 @@ const WorkerManage = {
   buildConversation,
   getTaskById,
   getTaskByIdRollbackBuild,
+  sendMessage,
   addTask,
   listTasks,
   kill,

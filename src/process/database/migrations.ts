@@ -826,13 +826,95 @@ const migration_v14: IMigration = {
 };
 
 /**
+ * Migration v14 -> v15: Add api_config table for HTTP API functionality
+ */
+const migration_v15: IMigration = {
+  version: 15,
+  name: 'Add api_config table',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS api_config (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        auth_token TEXT,
+        callback_url TEXT,
+        callback_method TEXT DEFAULT 'POST' CHECK(callback_method IN ('POST', 'GET', 'PUT')),
+        callback_headers TEXT,
+        callback_body TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+    `);
+    console.log('[Migration v15] Added api_config table');
+  },
+  down: (db) => {
+    db.exec(`
+      DROP TABLE IF EXISTS api_config;
+    `);
+    console.log('[Migration v15] Rolled back: Removed api_config table');
+  },
+};
+
+/**
+ * Migration v15 -> v16: Add callback_enabled to api_config
+ */
+const migration_v16: IMigration = {
+  version: 16,
+  name: 'Add callback_enabled to api_config',
+  up: (db) => {
+    const tableInfo = db.prepare('PRAGMA table_info(api_config)').all() as Array<{ name: string }>;
+    const hasCallbackEnabled = tableInfo.some((col) => col.name === 'callback_enabled');
+
+    if (!hasCallbackEnabled) {
+      db.exec(`
+        ALTER TABLE api_config ADD COLUMN callback_enabled INTEGER NOT NULL DEFAULT 0;
+      `);
+      db.exec(`
+        UPDATE api_config
+        SET callback_enabled = CASE
+          WHEN callback_url IS NOT NULL AND TRIM(callback_url) != '' THEN 1
+          ELSE 0
+        END;
+      `);
+    }
+
+    console.log('[Migration v16] Added callback_enabled to api_config');
+  },
+  down: (db) => {
+    // SQLite does not support DROP COLUMN directly, recreate table.
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS api_config_rollback (
+        id INTEGER PRIMARY KEY CHECK(id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        auth_token TEXT,
+        callback_url TEXT,
+        callback_method TEXT DEFAULT 'POST' CHECK(callback_method IN ('POST', 'GET', 'PUT')),
+        callback_headers TEXT,
+        callback_body TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      INSERT INTO api_config_rollback (id, enabled, auth_token, callback_url, callback_method, callback_headers, callback_body, created_at, updated_at)
+      SELECT id, enabled, auth_token, callback_url, callback_method, callback_headers, callback_body, created_at, updated_at
+      FROM api_config;
+
+      DROP TABLE api_config;
+      ALTER TABLE api_config_rollback RENAME TO api_config;
+    `);
+
+    console.log('[Migration v16] Rolled back: Removed callback_enabled from api_config');
+  },
+};
+
+/**
  * All migrations in order
  */
 // prettier-ignore
 export const ALL_MIGRATIONS: IMigration[] = [
   migration_v1, migration_v2, migration_v3, migration_v4, migration_v5, migration_v6,
   migration_v7, migration_v8, migration_v9, migration_v10, migration_v11, migration_v12,
-  migration_v13, migration_v14,
+  migration_v13, migration_v14, migration_v15, migration_v16,
 ];
 
 /**

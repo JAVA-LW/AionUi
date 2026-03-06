@@ -113,6 +113,25 @@ export interface IConfigStorageRefer {
     customAgentId?: string;
     name?: string;
   };
+  // API configuration / API 配置
+  'api.config'?: IApiConfig;
+}
+
+/**
+ * API Configuration interface for HTTP API functionality
+ * HTTP API 功能的配置接口
+ */
+export interface IApiConfig {
+  id: number;
+  enabled: boolean;
+  authToken?: string;
+  callbackEnabled: boolean;
+  callbackUrl?: string;
+  callbackMethod: 'POST' | 'GET' | 'PUT';
+  callbackHeaders?: Record<string, string>;
+  callbackBody?: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface IEnvStorageRefer {

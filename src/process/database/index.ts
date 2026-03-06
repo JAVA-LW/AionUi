@@ -1129,6 +1129,95 @@ export class AionUIDatabase {
   }
 
   /**
+   * ==================
+   * API Configuration operations
+   * API 配置操作
+   * ==================
+   */
+
+  /**
+   * Get API configuration (singleton - id=1)
+   */
+  getApiConfig(): IQueryResult<import('@/common/storage').IApiConfig | null> {
+    try {
+      const row = this.db.prepare('SELECT * FROM api_config WHERE id = 1').get() as any | undefined;
+      if (!row) {
+        return { success: true, data: null };
+      }
+
+      // Parse JSON fields
+      const config: import('@/common/storage').IApiConfig = {
+        id: row.id,
+        enabled: row.enabled === 1,
+        authToken: row.auth_token ?? undefined,
+        callbackEnabled: row.callback_enabled === 1,
+        callbackUrl: row.callback_url ?? undefined,
+        callbackMethod: row.callback_method || 'POST',
+        callbackHeaders: row.callback_headers ? JSON.parse(row.callback_headers) : undefined,
+        callbackBody: row.callback_body ?? undefined,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+
+      return { success: true, data: config };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Save or update API configuration
+   */
+  saveApiConfig(config: Partial<import('@/common/storage').IApiConfig>): IQueryResult<boolean> {
+    try {
+      const now = Date.now();
+
+      const stmt = this.db.prepare(`
+        INSERT INTO api_config (
+          id, enabled, auth_token, callback_enabled, callback_url,
+          callback_method, callback_headers, callback_body, created_at, updated_at
+        )
+        VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          enabled = excluded.enabled,
+          auth_token = excluded.auth_token,
+          callback_enabled = excluded.callback_enabled,
+          callback_url = excluded.callback_url,
+          callback_method = excluded.callback_method,
+          callback_headers = excluded.callback_headers,
+          callback_body = excluded.callback_body,
+          updated_at = excluded.updated_at
+      `);
+
+      stmt.run(config.enabled ? 1 : 0, config.authToken ?? null, config.callbackEnabled ? 1 : 0, config.callbackUrl ?? null, config.callbackMethod ?? 'POST', config.callbackHeaders ? JSON.stringify(config.callbackHeaders) : null, config.callbackBody ?? null, config.createdAt ?? now, now);
+
+      return { success: true, data: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Update API enabled status
+   */
+  updateApiEnabled(enabled: boolean): IQueryResult<boolean> {
+    try {
+      const now = Date.now();
+      const result = this.db.prepare('UPDATE api_config SET enabled = ?, updated_at = ? WHERE id = 1').run(enabled ? 1 : 0, now);
+
+      if (result.changes === 0) {
+        // If no row exists, create default config
+        const insertStmt = this.db.prepare('INSERT INTO api_config (id, enabled, created_at, updated_at) VALUES (1, ?, ?, ?)');
+        insertStmt.run(enabled ? 1 : 0, now, now);
+      }
+
+      return { success: true, data: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * Vacuum database to reclaim space
    */
   vacuum(): void {

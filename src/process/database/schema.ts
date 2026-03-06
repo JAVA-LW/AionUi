@@ -80,6 +80,22 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at);
   `);
 
+  // API configuration table (API配置表 - 单例表)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS api_config (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      enabled INTEGER NOT NULL DEFAULT 0,
+      auth_token TEXT,
+      callback_enabled INTEGER NOT NULL DEFAULT 0,
+      callback_url TEXT,
+      callback_method TEXT DEFAULT 'POST' CHECK(callback_method IN ('POST', 'GET', 'PUT')),
+      callback_headers TEXT,
+      callback_body TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+
   console.log('[Database] Schema initialized successfully');
 }
 
@@ -108,4 +124,4 @@ export function setDatabaseVersion(db: Database.Database, version: number): void
  * Current database schema version
  * Update this when adding new migrations in migrations.ts
  */
-export const CURRENT_DB_VERSION = 14;
+export const CURRENT_DB_VERSION = 16;

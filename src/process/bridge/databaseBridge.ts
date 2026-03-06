@@ -64,4 +64,32 @@ export function initDatabaseBridge(): void {
       return [];
     }
   });
+
+  ipcBridge.database.getApiConfig.provider(() => {
+    try {
+      const db = getDatabase();
+      const result = db.getApiConfig();
+      return Promise.resolve(result.success ? result.data ?? null : null);
+    } catch (error) {
+      console.error('[DatabaseBridge] Error getting API config:', error);
+      return Promise.resolve(null);
+    }
+  });
+
+  ipcBridge.database.saveApiConfig.provider((config) => {
+    try {
+      const db = getDatabase();
+      const result = db.saveApiConfig(config);
+      return Promise.resolve({
+        success: !!result.success,
+        error: result.success ? undefined : result.error,
+      });
+    } catch (error) {
+      console.error('[DatabaseBridge] Error saving API config:', error);
+      return Promise.resolve({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  });
 }

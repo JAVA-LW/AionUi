@@ -250,9 +250,9 @@ const resolveRemoteAccess = (config: WebUIUserConfig): boolean => {
   return isRemoteMode || hostRequestsRemote || envRemote === true || configRemote;
 };
 
-const isWebUIMode = hasSwitch('webui');
-const isRemoteMode = hasSwitch('remote');
-const isResetPasswordMode = hasCommand('--resetpass');
+const isWebUIMode = hasSwitch('webui') || parseBooleanEnv(process.env.AIONUI_WEBUI) === true;
+const isRemoteMode = hasSwitch('remote') || parseBooleanEnv(process.env.AIONUI_REMOTE_MODE) === true;
+const isResetPasswordMode = hasCommand('--resetpass') || parseBooleanEnv(process.env.AIONUI_RESETPASS) === true;
 
 let mainWindow: BrowserWindow;
 

@@ -14,6 +14,7 @@ import { ProcessConfig } from '../initStorage';
 import { addMessage, addOrUpdateMessage, nextTickToLocalFinish } from '../message';
 import { handlePreviewOpenEvent } from '../utils/previewUtils';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
+import { ConversationTurnCompletionService } from '@process/services/ConversationTurnCompletionService';
 import { prepareFirstMessageWithSkillsIndex } from './agentUtils';
 /** Enable ACP performance diagnostics via ACP_PERF=1 */
 const ACP_PERF_LOG = process.env.ACP_PERF === '1';
@@ -259,6 +260,8 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           }
         },
         onSignalEvent: async (v) => {
+          let shouldNotifyTurnCompleted = v.type === 'finish';
+
           // 仅发送信号到前端，不更新消息列表
           if (v.type === 'acp_permission') {
             const { toolCall, options } = v.data as AcpPermissionRequest;
@@ -318,6 +321,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
             });
             // Send collected responses back to AI agent so it can continue
             if (collectedResponses.length > 0 && this.agent) {
+              shouldNotifyTurnCompleted = false;
               const feedbackMessage = `[System Response]\n${collectedResponses.join('\n')}`;
               await this.agent.sendMessage({ content: feedbackMessage });
             }
@@ -333,6 +337,10 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
             ...(v as any),
             conversation_id: this.conversation_id,
           });
+
+          if (shouldNotifyTurnCompleted) {
+            void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
+          }
         },
       });
       return this.agent.start().then(async () => {
@@ -479,6 +487,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         data: null,
       };
       ipcBridge.acpConversation.responseStream.emit(finishMessage);
+      void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
 
       return new Promise((_, reject) => {
         nextTickToLocalFinish(() => {
