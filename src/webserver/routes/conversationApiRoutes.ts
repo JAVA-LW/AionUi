@@ -14,6 +14,7 @@ import { getDatabase } from '@process/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { formatStatusLastMessage, getConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
 import { ipcBridge } from '@/common';
+import type { TProviderWithModel } from '@/common/storage';
 import { uuid } from '@/common/utils';
 import { buildConversationTitleFromMessage } from '@/common/utils/conversationTitle';
 
@@ -53,6 +54,16 @@ const parseOptionalBoolean = (value: unknown): boolean | undefined => {
   }
   return undefined;
 };
+
+const getFallbackConversationModel = (): TProviderWithModel =>
+  ({
+    id: 'default-provider',
+    platform: 'openai',
+    name: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    apiKey: '***',
+    useModel: 'gpt-4o-mini',
+  }) as TProviderWithModel;
 
 const parseSessionIdQuery = (req: Request): string | undefined => parseOptionalString(req.query?.sessionId);
 
@@ -358,15 +369,22 @@ router.post('/create', async (req: Request, res: Response) => {
       });
     }
 
+    const hasValidModelObject = !!model && typeof model === 'object' && !Array.isArray(model);
+
     // Validate required fields
-    if (!model || !message) {
+    if (!message) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: model, message (and one of type/cli)',
+        error: 'Missing required field: message (and one of type/cli)',
       });
     }
-
-    if (!model || typeof model !== 'object' || Array.isArray(model)) {
+    if (resolvedType.type === 'gemini' && !hasValidModelObject) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required field: model (required for gemini conversations)',
+      });
+    }
+    if (model !== undefined && !hasValidModelObject) {
       return res.status(400).json({
         success: false,
         error: 'Invalid model. Expected an object',
@@ -375,6 +393,7 @@ router.post('/create', async (req: Request, res: Response) => {
 
     const type = resolvedType.type;
     const resolvedBackend = backend || resolvedType.backendFromCli;
+    const effectiveModel = (hasValidModelObject ? model : getFallbackConversationModel()) as TProviderWithModel;
     const conversationTitle = buildConversationTitleFromMessage(message);
     if (type === 'acp' && !resolvedBackend) {
       return res.status(400).json({
@@ -386,7 +405,7 @@ router.post('/create', async (req: Request, res: Response) => {
     // Create conversation
     const result = await ConversationService.createConversation({
       type,
-      model,
+      model: effectiveModel,
       extra: {
         workspace,
         backend: resolvedBackend as (typeof VALID_ACP_BACKENDS)[number] | undefined,

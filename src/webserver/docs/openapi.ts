@@ -58,7 +58,7 @@ export function buildOpenApiSpec(): Record<string, any> {
             },
             model: {
               type: 'object',
-              description: 'Model object used by AionUi',
+              description: 'Model object used by AionUi. Required for gemini conversations; optional for ACP/CLI-based conversations.',
               additionalProperties: true,
               example: {
                 id: 'default-provider',
@@ -121,7 +121,7 @@ export function buildOpenApiSpec(): Record<string, any> {
               description: 'When true, wait until first message dispatch completes before returning.',
             },
           },
-          required: ['model', 'message'],
+          required: ['message'],
         },
         ConversationCreateResponse: {
           type: 'object',

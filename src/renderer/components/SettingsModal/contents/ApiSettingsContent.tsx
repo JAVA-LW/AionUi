@@ -11,6 +11,8 @@ import { DEFAULT_CALLBACK_BODY, DEFAULT_JS_FILTER_SCRIPT } from '@/common/apiCal
 import { ipcBridge } from '@/common';
 import { ConfigStorage, type IApiConfig, type IProvider } from '@/common/storage';
 import { getAgentModes } from '@/renderer/constants/agentModes';
+import AcpModelSelector from '@/renderer/components/AcpModelSelector';
+import AgentModeSelector from '@/renderer/components/AgentModeSelector';
 import type { AcpModelInfo } from '@/types/acpTypes';
 import type { IWebUIStatus } from '@/common/ipcBridge';
 
@@ -306,6 +308,7 @@ const ApiSettingsContent: React.FC = () => {
   }, [cliOptions, selectedCli]);
 
   const usingAcpModelSource = selectedCliOption?.conversationType === 'acp' && !!selectedCliOption.backend;
+  const requiresProviderModel = selectedCliOption?.conversationType === 'gemini';
 
   const cliModelOptions = useMemo<CliModelOption[]>(() => {
     if (!usingAcpModelSource || !selectedCliOption?.backend) {
@@ -320,6 +323,27 @@ const ApiSettingsContent: React.FC = () => {
       label: item.label || item.id,
     }));
   }, [usingAcpModelSource, selectedCliOption, acpCachedModels]);
+
+  const selectedCliLocalModelInfo = useMemo<AcpModelInfo | null>(() => {
+    if (!usingAcpModelSource || !selectedCliOption?.backend) {
+      return null;
+    }
+
+    const modelInfo = acpCachedModels[selectedCliOption.backend];
+    if (!modelInfo?.availableModels?.length) {
+      return null;
+    }
+
+    const effectiveModelId = selectedCliModel || modelInfo.currentModelId || modelInfo.availableModels[0]?.id || null;
+    const matchedModel = effectiveModelId ? modelInfo.availableModels.find((item) => item.id === effectiveModelId) : undefined;
+
+    return {
+      ...modelInfo,
+      canSwitch: true,
+      currentModelId: effectiveModelId,
+      currentModelLabel: matchedModel?.label || modelInfo.currentModelLabel || effectiveModelId || '',
+    };
+  }, [usingAcpModelSource, selectedCliOption, acpCachedModels, selectedCliModel]);
 
   useEffect(() => {
     if (!usingAcpModelSource || !selectedCliOption?.backend) {
@@ -356,6 +380,7 @@ const ApiSettingsContent: React.FC = () => {
     }
     return [{ value: 'default', label: 'Default' }];
   }, [modeBackend]);
+  const canUseModeSelector = Boolean(modeBackend && getAgentModes(modeBackend).length > 0);
 
   useEffect(() => {
     if (!modeOptions.some((item) => item.value === selectedMode)) {
@@ -371,23 +396,24 @@ const ApiSettingsContent: React.FC = () => {
   }, [providerModelOptions, selectedProviderModel]);
 
   const generatedPayload = useMemo(() => {
-    const providerModel = selectedProviderModelOption
-      ? (() => {
-          const { model: _modelList, ...base } = selectedProviderModelOption.provider;
-          return {
-            ...base,
-            useModel: selectedProviderModelOption.modelId,
-          };
-        })()
-      : getFallbackModel();
-
     const conversationType = selectedCliOption?.conversationType || 'gemini';
     const payload: Record<string, unknown> = {
       type: conversationType,
       cli: selectedCliOption?.backend || conversationType,
-      model: providerModel,
       message: message.trim() || DEFAULT_MESSAGE,
     };
+
+    if (requiresProviderModel) {
+      payload.model = selectedProviderModelOption
+        ? (() => {
+            const { model: _modelList, ...base } = selectedProviderModelOption.provider;
+            return {
+              ...base,
+              useModel: selectedProviderModelOption.modelId,
+            };
+          })()
+        : getFallbackModel();
+    }
 
     if (workspace.trim()) {
       payload.workspace = workspace.trim();
@@ -411,7 +437,7 @@ const ApiSettingsContent: React.FC = () => {
     }
 
     return payload;
-  }, [selectedProviderModelOption, selectedCliOption, message, workspace, selectedMode, selectedCliModel, acpCachedModels]);
+  }, [requiresProviderModel, selectedProviderModelOption, selectedCliOption, message, workspace, selectedMode, selectedCliModel, acpCachedModels]);
 
   const generatedPayloadText = useMemo(() => JSON.stringify(generatedPayload, null, 2), [generatedPayload]);
   const docsUrl = useMemo(() => {
@@ -659,7 +685,7 @@ const ApiSettingsContent: React.FC = () => {
 
       <div className='mb-20px'>
         <h4 className='text-14px font-600 text-t-primary mb-12px'>/api/v1/conversation/create 参数生成器</h4>
-        <p className='text-12px text-t-tertiary mb-16px'>CLI 与 CLI 模型来源于现有 Agent 检测/缓存逻辑（与引导页一致），不是硬编码列表。</p>
+        <p className='text-12px text-t-tertiary mb-16px'>CLI、模式和 CLI 模型都复用了现有会话侧的检测/缓存逻辑；ACP/CLI 请求不会再额外注入无意义的 provider model。</p>
 
         <div className='grid grid-cols-1 md:grid-cols-2 gap-12px mb-12px'>
           <div>
@@ -670,18 +696,26 @@ const ApiSettingsContent: React.FC = () => {
           {usingAcpModelSource ? (
             <div>
               <label className='text-13px text-t-primary mb-6px block'>CLI 模型</label>
-              <Select value={selectedCliModel || cliModelOptions[0]?.value} onChange={setSelectedCliModel} options={cliModelOptions.map((item) => ({ label: item.label, value: item.value }))} placeholder={cliModelOptions.length ? '选择 CLI 模型' : '暂无缓存模型，请先在该 CLI 会话中获取模型列表'} allowClear={false} />
+              <div className='min-h-32px flex items-center gap-8px'>
+                <AcpModelSelector backend={selectedCliOption?.backend} initialModelId={selectedCliModel || selectedCliLocalModelInfo?.currentModelId || undefined} localModelInfo={selectedCliLocalModelInfo} onSelectModel={setSelectedCliModel} />
+              </div>
+              {!cliModelOptions.length && <div className='text-12px text-t-tertiary mt-4px'>暂无缓存模型，请先在该 CLI 会话里拉取一次模型列表。</div>}
+            </div>
+          ) : requiresProviderModel ? (
+            <div>
+              <label className='text-13px text-t-primary mb-6px block'>模型</label>
+              <Select value={selectedProviderModel || providerModelOptions[0]?.value} onChange={setSelectedProviderModel} options={providerModelOptions.map((item) => ({ label: item.label, value: item.value }))} placeholder={providerModelOptions.length ? '选择模型' : '未检测到平台模型，使用占位模型'} allowClear={false} />
             </div>
           ) : (
             <div>
               <label className='text-13px text-t-primary mb-6px block'>模型</label>
-              <Select value={selectedProviderModel || providerModelOptions[0]?.value} onChange={setSelectedProviderModel} options={providerModelOptions.map((item) => ({ label: item.label, value: item.value }))} placeholder={providerModelOptions.length ? '选择模型' : '未检测到平台模型，使用占位模型'} allowClear={false} />
+              <div className='min-h-32px flex items-center text-12px text-t-tertiary'>当前 CLI 类型不需要单独传 `model`。</div>
             </div>
           )}
 
           <div>
             <label className='text-13px text-t-primary mb-6px block'>模式 (mode)</label>
-            <Select value={selectedMode} onChange={setSelectedMode} options={modeOptions.map((item) => ({ label: item.label, value: item.value }))} allowClear={false} />
+            <div className='min-h-32px flex items-center gap-8px'>{canUseModeSelector ? <AgentModeSelector backend={modeBackend} compact initialMode={selectedMode} onModeSelect={setSelectedMode} modeLabelFormatter={(mode) => mode.label} compactLabelPrefix='Mode' /> : <Select value={selectedMode} onChange={setSelectedMode} options={modeOptions.map((item) => ({ label: item.label, value: item.value }))} allowClear={false} />}</div>
           </div>
 
           <div>

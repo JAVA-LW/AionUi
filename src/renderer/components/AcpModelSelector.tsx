@@ -30,24 +30,50 @@ import useSWR from 'swr';
  * cached model info before the agent manager is created (pre-first-message).
  * When preview panel is open, shows compact version (truncated label).
  */
+const resolveModelInfo = (modelInfo: AcpModelInfo | null, initialModelId?: string): AcpModelInfo | null => {
+  if (!modelInfo) {
+    return null;
+  }
+
+  const effectiveModelId = initialModelId || modelInfo.currentModelId || null;
+  const matchedModel = effectiveModelId ? modelInfo.availableModels?.find((item) => item.id === effectiveModelId) : undefined;
+
+  return {
+    ...modelInfo,
+    currentModelId: effectiveModelId,
+    currentModelLabel: matchedModel?.label || modelInfo.currentModelLabel || effectiveModelId || '',
+  };
+};
+
 const AcpModelSelector: React.FC<{
-  conversationId: string;
+  conversationId?: string;
   /** ACP backend name for loading cached models (e.g., 'claude', 'qwen') */
   backend?: string;
   /** Pre-selected model ID from Guid page */
   initialModelId?: string;
-}> = ({ conversationId, backend, initialModelId }) => {
+  /** Optional local/cached model info source for non-conversation usage */
+  localModelInfo?: AcpModelInfo | null;
+  /** Optional local change handler for non-conversation usage */
+  onSelectModel?: (modelId: string) => void;
+}> = ({ conversationId, backend, initialModelId, localModelInfo, onSelectModel }) => {
   const { t } = useTranslation();
   const { isOpen: isPreviewOpen } = usePreviewContext();
   const layout = useLayoutContext();
-  const [modelInfo, setModelInfo] = useState<AcpModelInfo | null>(null);
+  const [modelInfo, setModelInfo] = useState<AcpModelInfo | null>(() => resolveModelInfo(localModelInfo ?? null, initialModelId));
   const modelInfoRef = useRef(modelInfo);
   modelInfoRef.current = modelInfo;
   // Track whether user has manually switched model via dropdown
   const hasUserChangedModel = useRef(false);
+  const isUsingLocalModelInfo = localModelInfo !== undefined;
+
+  useEffect(() => {
+    if (!isUsingLocalModelInfo) return;
+    setModelInfo(resolveModelInfo(localModelInfo ?? null, initialModelId));
+  }, [initialModelId, isUsingLocalModelInfo, localModelInfo]);
 
   // Fetch initial model info on mount, fallback to cached models if manager not ready
   useEffect(() => {
+    if (isUsingLocalModelInfo || !conversationId) return;
     let cancelled = false;
     ipcBridge.acpConversation.getModelInfo
       .invoke({ conversationId })
@@ -103,10 +129,11 @@ const AcpModelSelector: React.FC<{
         // Silently ignore
       }
     }
-  }, [conversationId, backend, initialModelId]);
+  }, [conversationId, backend, initialModelId, isUsingLocalModelInfo]);
 
   // Listen for acp_model_info / codex_model_info events from responseStream
   useEffect(() => {
+    if (isUsingLocalModelInfo || !conversationId) return;
     const handler = (message: IResponseMessage) => {
       if (message.conversation_id !== conversationId) return;
       if (message.type === 'acp_model_info' && message.data) {
@@ -144,11 +171,29 @@ const AcpModelSelector: React.FC<{
       }
     };
     return ipcBridge.acpConversation.responseStream.on(handler);
-  }, [conversationId, initialModelId]);
+  }, [conversationId, initialModelId, isUsingLocalModelInfo, backend]);
 
   const handleSelectModel = useCallback(
     (modelId: string) => {
       hasUserChangedModel.current = true;
+      if (onSelectModel) {
+        setModelInfo((prev) => {
+          if (!prev) return prev;
+          const matchedModel = prev.availableModels?.find((item) => item.id === modelId);
+          return {
+            ...prev,
+            currentModelId: modelId,
+            currentModelLabel: matchedModel?.label || modelId,
+          };
+        });
+        onSelectModel(modelId);
+        return;
+      }
+
+      if (!conversationId) {
+        return;
+      }
+
       ipcBridge.acpConversation.setModel
         .invoke({ conversationId, modelId })
         .then((result) => {
@@ -160,7 +205,7 @@ const AcpModelSelector: React.FC<{
           console.error('[AcpModelSelector] Failed to set model:', error);
         });
     },
-    [conversationId]
+    [conversationId, onSelectModel]
   );
 
   const defaultModelLabel = t('common.defaultModel');
