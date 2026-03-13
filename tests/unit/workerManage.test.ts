@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const releaseConversationMessageCache = vi.fn();
 const getConversation = vi.fn();
+const removeBusyState = vi.fn();
+const forgetSession = vi.fn();
 
 vi.mock('../../src/process/initStorage', () => ({
   ProcessChat: {
@@ -28,6 +30,15 @@ vi.mock('../../src/process/message', () => ({
 vi.mock('../../src/process/services/cron/CronBusyGuard', () => ({
   cronBusyGuard: {
     isProcessing: vi.fn(() => false),
+    remove: removeBusyState,
+  },
+}));
+
+vi.mock('../../src/process/services/ConversationTurnCompletionService', () => ({
+  ConversationTurnCompletionService: {
+    getInstance: () => ({
+      forgetSession,
+    }),
   },
 }));
 
@@ -51,11 +62,13 @@ vi.mock('../../src/agent/codex', () => ({
   CodexAgentManager: class CodexAgentManager {},
 }));
 
-describe('WorkerManage.pruneIdleTasks', () => {
+describe('WorkerManage.kill', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-12T00:00:00.000Z'));
     releaseConversationMessageCache.mockReset();
+    removeBusyState.mockReset();
+    forgetSession.mockReset();
     getConversation.mockReset();
     getConversation.mockImplementation((id: string) => {
       if (id === 'finished-1') {
@@ -98,7 +111,7 @@ describe('WorkerManage.pruneIdleTasks', () => {
     vi.useRealTimers();
   });
 
-  it('evicts finished API tasks when pruned manually but keeps running and UI tasks', async () => {
+  it('destroys runtime state and clears related caches explicitly on kill', async () => {
     const { default: WorkerManage } = await import('../../src/process/WorkerManage');
 
     const finishedTask = {
@@ -107,31 +120,13 @@ describe('WorkerManage.pruneIdleTasks', () => {
       getConfirmations: () => [],
       kill: vi.fn(),
     } as any;
-    const runningTask = {
-      type: 'gemini',
-      status: 'running',
-      getConfirmations: () => [],
-      kill: vi.fn(),
-    } as any;
-    const uiTask = {
-      type: 'gemini',
-      status: 'finished',
-      getConfirmations: () => [],
-      kill: vi.fn(),
-    } as any;
-
     WorkerManage.addTask('finished-1', finishedTask);
-    WorkerManage.addTask('running-1', runningTask);
-    WorkerManage.addTask('ui-1', uiTask);
-
-    vi.advanceTimersByTime(2 * 60 * 1000 + 1000);
-    WorkerManage.pruneIdleTasks(Date.now());
+    WorkerManage.kill('finished-1');
 
     expect(finishedTask.kill).toHaveBeenCalledTimes(1);
-    expect(uiTask.kill).not.toHaveBeenCalled();
     expect(WorkerManage.getTaskById('finished-1')).toBeUndefined();
-    expect(WorkerManage.getTaskById('running-1')).toBe(runningTask);
-    expect(WorkerManage.getTaskById('ui-1')).toBe(uiTask);
     expect(releaseConversationMessageCache).toHaveBeenCalledWith('finished-1');
+    expect(removeBusyState).toHaveBeenCalledWith('finished-1');
+    expect(forgetSession).toHaveBeenCalledWith('finished-1');
   });
 });

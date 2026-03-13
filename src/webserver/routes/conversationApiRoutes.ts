@@ -14,7 +14,7 @@ import { getDatabase } from '@process/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { formatStatusLastMessage, getConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
 import { ipcBridge } from '@/common';
-import type { TProviderWithModel } from '@/common/storage';
+import type { TChatConversation, TProviderWithModel } from '@/common/storage';
 import { uuid } from '@/common/utils';
 import { buildConversationTitleFromMessage } from '@/common/utils/conversationTitle';
 
@@ -66,6 +66,55 @@ const getFallbackConversationModel = (): TProviderWithModel =>
   }) as TProviderWithModel;
 
 const parseSessionIdQuery = (req: Request): string | undefined => parseOptionalString(req.query?.sessionId);
+
+const parseListQueryValues = (value: unknown): string[] | undefined => {
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const items = value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return items.length > 0 ? items : undefined;
+};
+
+export type ConversationStatusListItem = {
+  sessionId: string;
+  conversationId: string;
+  name?: string;
+  type: TChatConversation['type'];
+  cli?: string;
+  source?: TChatConversation['source'];
+  status: ConversationStatusValue;
+  state: ConversationRuntimeState;
+  detail: string;
+  canSendMessage: boolean;
+  runtime: {
+    hasTask: boolean;
+    taskStatus?: ConversationStatusValue;
+    isProcessing: boolean;
+    pendingConfirmations: number;
+    dbStatus?: ConversationStatusValue;
+  };
+  lastMessage?: ReturnType<typeof formatStatusLastMessage>;
+  updatedAt?: number;
+  createdAt?: number;
+};
+
+type ConversationSnapshotGetter = (sessionId: string) => ReturnType<typeof getConversationStatusSnapshot>;
+type ConversationListScope = 'active' | 'generating' | 'all';
+
+type ConversationStatusListFilters = {
+  scope: ConversationListScope;
+  status?: ConversationStatusValue[];
+  state?: ConversationRuntimeState[];
+  type?: TChatConversation['type'][];
+  cli?: string[];
+  source?: string[];
+  canSendMessage?: boolean;
+};
 
 type IConversationStatusInput = {
   status?: ConversationStatusValue | undefined;
@@ -172,6 +221,111 @@ const _deriveConversationRuntimeStatus = (sessionId: string, conversation: IConv
     canSendMessage: true,
     runtime: { hasTask, taskStatus, isProcessing, pendingConfirmations, dbStatus },
   };
+};
+
+export const isConversationStatusActive = (snapshot: {
+  status: ConversationStatusValue;
+  state: ConversationRuntimeState;
+  runtime: {
+    hasTask: boolean;
+    taskStatus?: ConversationStatusValue;
+    isProcessing: boolean;
+    pendingConfirmations: number;
+  };
+}): boolean => {
+  if (snapshot.runtime.isProcessing || snapshot.runtime.pendingConfirmations > 0) {
+    return true;
+  }
+
+  if (snapshot.runtime.taskStatus === 'running' || snapshot.runtime.taskStatus === 'pending') {
+    return true;
+  }
+
+  if (snapshot.status === 'running' || snapshot.status === 'pending') {
+    return true;
+  }
+
+  return snapshot.state === 'ai_generating' || snapshot.state === 'ai_waiting_confirmation' || snapshot.state === 'initializing';
+};
+
+export const isConversationStatusGenerating = (snapshot: { status: ConversationStatusValue; state: ConversationRuntimeState }): boolean => {
+  if (snapshot.status === 'running' || snapshot.status === 'pending') {
+    return true;
+  }
+
+  return snapshot.state === 'ai_generating' || snapshot.state === 'ai_waiting_confirmation' || snapshot.state === 'initializing';
+};
+
+const matchesConversationStatusListFilters = (item: ConversationStatusListItem, filters: ConversationStatusListFilters): boolean => {
+  if (filters.scope === 'active' && !isConversationStatusActive(item)) {
+    return false;
+  }
+
+  if (filters.scope === 'generating' && !isConversationStatusGenerating(item)) {
+    return false;
+  }
+
+  if (filters.status && !filters.status.includes(item.status)) {
+    return false;
+  }
+
+  if (filters.state && !filters.state.includes(item.state)) {
+    return false;
+  }
+
+  if (filters.type && !filters.type.includes(item.type)) {
+    return false;
+  }
+
+  if (filters.cli && !filters.cli.includes(item.cli || '')) {
+    return false;
+  }
+
+  if (filters.source && !filters.source.includes(item.source || '')) {
+    return false;
+  }
+
+  if (typeof filters.canSendMessage === 'boolean' && item.canSendMessage !== filters.canSendMessage) {
+    return false;
+  }
+
+  return true;
+};
+
+export const buildConversationStatusList = (conversations: TChatConversation[], filters: ConversationStatusListFilters = { scope: 'generating' }, getSnapshot: ConversationSnapshotGetter = getConversationStatusSnapshot): ConversationStatusListItem[] => {
+  const items = conversations.reduce<ConversationStatusListItem[]>((result, conversation) => {
+    const snapshot = getSnapshot(conversation.id);
+    if (!snapshot) {
+      return result;
+    }
+
+    const item = {
+      sessionId: conversation.id,
+      conversationId: conversation.id,
+      name: conversation.name,
+      type: conversation.type,
+      cli: conversation.type === 'acp' ? conversation.extra.backend : undefined,
+      source: conversation.source,
+      status: snapshot.status,
+      state: snapshot.state,
+      detail: snapshot.detail,
+      canSendMessage: snapshot.canSendMessage,
+      runtime: snapshot.runtime,
+      lastMessage: formatStatusLastMessage(snapshot.lastMessage),
+      updatedAt: conversation.modifyTime,
+      createdAt: conversation.createTime,
+    } satisfies ConversationStatusListItem;
+
+    if (!matchesConversationStatusListFilters(item, filters)) {
+      return result;
+    }
+
+    result.push(item);
+
+    return result;
+  }, []);
+
+  return items.sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
 };
 
 const sleep = (ms: number): Promise<void> =>
@@ -563,6 +717,56 @@ router.get('/status', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/v1/conversation/status/list
+ * List active conversations with current status
+ */
+router.get('/status/list', async (_req: Request, res: Response) => {
+  try {
+    const scopeQuery = parseOptionalString(_req.query?.scope);
+    const scope: ConversationListScope = scopeQuery === 'active' || scopeQuery === 'all' ? scopeQuery : 'generating';
+    const status = parseListQueryValues(_req.query?.status) as ConversationStatusValue[] | undefined;
+    const state = parseListQueryValues(_req.query?.state) as ConversationRuntimeState[] | undefined;
+    const type = parseListQueryValues(_req.query?.type) as TChatConversation['type'][] | undefined;
+    const cli = parseListQueryValues(_req.query?.cli);
+    const source = parseListQueryValues(_req.query?.source);
+    const canSendMessage = parseOptionalBoolean(_req.query?.canSendMessage);
+
+    const db = getDatabase();
+    const allConversationsResult = db.getUserConversations(undefined, 0, 10000);
+    const items = buildConversationStatusList(allConversationsResult.data || [], {
+      scope,
+      status,
+      state,
+      type,
+      cli,
+      source,
+      canSendMessage,
+    });
+
+    res.json({
+      success: true,
+      total: items.length,
+      filters: {
+        scope,
+        status,
+        state,
+        type,
+        cli,
+        source,
+        canSendMessage,
+      },
+      items,
+    });
+  } catch (error) {
+    console.error('[API] List conversation status error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+/**
  * POST /api/v1/conversation/stop?sessionId={sessionId}
  * Stop AI generation
  * 终止 AI 生成
@@ -615,6 +819,8 @@ router.post('/stop', async (req: Request, res: Response) => {
 
     // Update conversation status
     db.updateConversation(sessionId, { status: 'finished' });
+    WorkerManage.kill(sessionId);
+    cronBusyGuard.setProcessing(sessionId, false);
 
     res.json({
       success: true,

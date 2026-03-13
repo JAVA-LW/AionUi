@@ -243,6 +243,11 @@ export class ConversationTurnCompletionService {
     return task;
   }
 
+  forgetSession(sessionId: string): void {
+    this.emittedKeys.delete(sessionId);
+    this.inFlight.delete(sessionId);
+  }
+
   private async settleAndEmit(sessionId: string): Promise<void> {
     await flushConversationMessages(sessionId);
 

@@ -15,6 +15,8 @@ import type AgentBaseTask from './task/BaseAgentManager';
 import { GeminiAgentManager } from './task/GeminiAgentManager';
 import { getDatabase } from './database/export';
 import { releaseConversationMessageCache } from './message';
+import { cronBusyGuard } from './services/cron/CronBusyGuard';
+import { ConversationTurnCompletionService } from './services/ConversationTurnCompletionService';
 
 const taskList: {
   id: string;
@@ -61,6 +63,8 @@ const destroyTask = (id: string, task: AgentBaseTask<unknown>) => {
   }
 
   releaseConversationMessageCache(id);
+  cronBusyGuard.remove(id);
+  ConversationTurnCompletionService.getInstance().forgetSession(id);
 };
 
 const isPrunableConversation = (id: string): boolean => {

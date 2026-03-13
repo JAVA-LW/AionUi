@@ -176,6 +176,56 @@ export function buildOpenApiSpec(): Record<string, any> {
           },
           required: ['success', 'sessionId', 'status'],
         },
+        ConversationStatusListResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            total: { type: 'integer', example: 2 },
+            filters: {
+              type: 'object',
+              additionalProperties: true,
+            },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  sessionId: { type: 'string', example: 'conv_1741000000000' },
+                  conversationId: { type: 'string', example: 'conv_1741000000000' },
+                  name: { type: 'string', example: 'Daily coding session' },
+                  type: { type: 'string', example: 'codex' },
+                  cli: { type: 'string', example: 'qwen', description: 'ACP backend/CLI type when the conversation type is `acp`.' },
+                  source: { type: 'string', example: 'api' },
+                  status: {
+                    type: 'string',
+                    enum: ['pending', 'running', 'finished'],
+                    example: 'running',
+                  },
+                  state: {
+                    type: 'string',
+                    enum: ['ai_generating', 'ai_waiting_input', 'ai_waiting_confirmation', 'initializing', 'stopped', 'error', 'unknown'],
+                    example: 'ai_generating',
+                  },
+                  detail: { type: 'string', example: 'AI is generating response' },
+                  canSendMessage: { type: 'boolean', example: false },
+                  runtime: {
+                    type: 'object',
+                    additionalProperties: true,
+                  },
+                  lastMessage: {
+                    type: 'object',
+                    nullable: true,
+                    additionalProperties: true,
+                  },
+                  updatedAt: { type: 'integer', example: 1741000001000 },
+                  createdAt: { type: 'integer', example: 1741000000000 },
+                },
+                required: ['sessionId', 'conversationId', 'type', 'status', 'state', 'detail', 'canSendMessage', 'runtime'],
+              },
+            },
+          },
+          required: ['success', 'total', 'items'],
+        },
         ConversationMessagesResponse: {
           type: 'object',
           properties: {
@@ -266,6 +316,75 @@ export function buildOpenApiSpec(): Record<string, any> {
               },
             },
             404: { description: 'Conversation not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
+      '/api/v1/conversation/status/list': {
+        get: {
+          tags: ['Conversation API'],
+          summary: 'List conversations by runtime status filters',
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: 'scope',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', enum: ['generating', 'active', 'all'], default: 'generating' },
+              description: 'Filter preset. `generating` returns in-progress sessions only; `active` returns runtime-alive sessions; `all` disables preset filtering.',
+            },
+            {
+              name: 'status',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', example: 'running,pending' },
+              description: 'Comma-separated conversation statuses.',
+            },
+            {
+              name: 'state',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', example: 'ai_generating,ai_waiting_confirmation' },
+              description: 'Comma-separated runtime states.',
+            },
+            {
+              name: 'type',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', example: 'gemini,codex' },
+              description: 'Comma-separated conversation types.',
+            },
+            {
+              name: 'cli',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', example: 'qwen,codex' },
+              description: 'Comma-separated ACP backend/CLI types.',
+            },
+            {
+              name: 'source',
+              in: 'query',
+              required: false,
+              schema: { type: 'string', example: 'api,aionui' },
+              description: 'Comma-separated conversation sources.',
+            },
+            {
+              name: 'canSendMessage',
+              in: 'query',
+              required: false,
+              schema: { type: 'boolean' },
+              description: 'Filter by whether the conversation currently accepts a new message.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Active conversation status list',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ConversationStatusListResponse' },
+                },
+              },
+            },
+            401: { description: 'Unauthorized', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
           },
         },
       },
