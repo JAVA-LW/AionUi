@@ -1080,13 +1080,65 @@ const migration_v18: IMigration = {
 };
 
 /**
+ * Migration v18 -> v19: Add structured token usage table
+ */
+const migration_v19: IMigration = {
+  version: 19,
+  name: 'Add conversation token usage table',
+  up: (db) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS conversation_token_usage (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        backend TEXT NOT NULL,
+        reply_index INTEGER NOT NULL,
+        assistant_message_id TEXT,
+        input_tokens INTEGER NOT NULL DEFAULT 0,
+        output_tokens INTEGER NOT NULL DEFAULT 0,
+        cached_read_tokens INTEGER NOT NULL DEFAULT 0,
+        cached_write_tokens INTEGER NOT NULL DEFAULT 0,
+        thought_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        context_used INTEGER,
+        context_size INTEGER,
+        session_cost_amount REAL,
+        session_cost_currency TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+        UNIQUE (conversation_id, reply_index)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_conversation_token_usage_conversation_id
+        ON conversation_token_usage(conversation_id);
+      CREATE INDEX IF NOT EXISTS idx_conversation_token_usage_reply_index
+        ON conversation_token_usage(conversation_id, reply_index DESC);
+      CREATE INDEX IF NOT EXISTS idx_conversation_token_usage_created_at
+        ON conversation_token_usage(created_at DESC);
+    `);
+
+    console.log('[Migration v19] Added conversation token usage table');
+  },
+  down: (db) => {
+    db.exec(`
+      DROP INDEX IF EXISTS idx_conversation_token_usage_created_at;
+      DROP INDEX IF EXISTS idx_conversation_token_usage_reply_index;
+      DROP INDEX IF EXISTS idx_conversation_token_usage_conversation_id;
+      DROP TABLE IF EXISTS conversation_token_usage;
+    `);
+
+    console.log('[Migration v19] Rolled back: Removed conversation token usage table');
+  },
+};
+
+/**
  * All migrations in order
  */
 // prettier-ignore
 export const ALL_MIGRATIONS: IMigration[] = [
   migration_v1, migration_v2, migration_v3, migration_v4, migration_v5, migration_v6,
   migration_v7, migration_v8, migration_v9, migration_v10, migration_v11, migration_v12,
-  migration_v13, migration_v14, migration_v15, migration_v16, migration_v17, migration_v18,
+  migration_v13, migration_v14, migration_v15, migration_v16, migration_v17, migration_v18, migration_v19,
 ];
 
 /**

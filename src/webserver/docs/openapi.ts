@@ -241,6 +241,175 @@ export function buildOpenApiSpec(): Record<string, any> {
           },
           required: ['success', 'messages', 'total', 'page', 'pageSize', 'hasMore'],
         },
+        ConversationTokenUsageRecord: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'token_usage_conv_001_1_1741000000000' },
+            conversationId: { type: 'string', example: 'conv_1741000000000' },
+            backend: { type: 'string', example: 'claude' },
+            replyIndex: { type: 'integer', example: 1 },
+            assistantMessageId: { type: 'string', nullable: true, example: 'msg_assistant_001' },
+            inputTokens: { type: 'integer', example: 1200 },
+            outputTokens: { type: 'integer', example: 320 },
+            cachedReadTokens: { type: 'integer', example: 0 },
+            cachedWriteTokens: { type: 'integer', example: 0 },
+            thoughtTokens: { type: 'integer', example: 64 },
+            totalTokens: { type: 'integer', example: 1520 },
+            contextUsed: { type: 'integer', nullable: true, example: 8420 },
+            contextSize: { type: 'integer', nullable: true, example: 200000 },
+            sessionCostAmount: { type: 'number', nullable: true, example: 0.12 },
+            sessionCostCurrency: { type: 'string', nullable: true, example: 'USD' },
+            createdAt: { type: 'integer', example: 1741000001000 },
+            updatedAt: { type: 'integer', example: 1741000001000 },
+          },
+          required: ['id', 'conversationId', 'backend', 'replyIndex', 'inputTokens', 'outputTokens', 'cachedReadTokens', 'cachedWriteTokens', 'thoughtTokens', 'totalTokens', 'createdAt', 'updatedAt'],
+        },
+        ConversationTokenUsageSummary: {
+          type: 'object',
+          properties: {
+            conversationId: { type: 'string', example: 'conv_1741000000000' },
+            backend: { type: 'string', nullable: true, example: 'claude' },
+            replyCount: { type: 'integer', example: 3 },
+            totalInputTokens: { type: 'integer', example: 5400 },
+            totalOutputTokens: { type: 'integer', example: 960 },
+            totalCachedReadTokens: { type: 'integer', example: 0 },
+            totalCachedWriteTokens: { type: 'integer', example: 0 },
+            totalThoughtTokens: { type: 'integer', example: 128 },
+            totalTokens: { type: 'integer', example: 6360 },
+            latestContextUsed: { type: 'integer', nullable: true, example: 12400 },
+            latestContextSize: { type: 'integer', nullable: true, example: 200000 },
+            latestSessionCostAmount: { type: 'number', nullable: true, example: 0.34 },
+            latestSessionCostCurrency: { type: 'string', nullable: true, example: 'USD' },
+            lastReplyIndex: { type: 'integer', nullable: true, example: 3 },
+            firstRecordedAt: { type: 'integer', nullable: true, example: 1741000001000 },
+            lastRecordedAt: { type: 'integer', nullable: true, example: 1741000003000 },
+          },
+          required: [
+            'conversationId',
+            'replyCount',
+            'totalInputTokens',
+            'totalOutputTokens',
+            'totalCachedReadTokens',
+            'totalCachedWriteTokens',
+            'totalThoughtTokens',
+            'totalTokens',
+          ],
+        },
+        ConversationTokenUsageRange: {
+          type: 'object',
+          properties: {
+            startTime: { type: 'integer', nullable: true, example: 1741000000000 },
+            endTime: { type: 'integer', nullable: true, example: 1741086399999 },
+          },
+        },
+        ConversationUsageMonitorSummary: {
+          type: 'object',
+          properties: {
+            conversationCount: { type: 'integer', example: 12 },
+            replyCount: { type: 'integer', example: 38 },
+            totalInputTokens: { type: 'integer', example: 54000 },
+            totalOutputTokens: { type: 'integer', example: 12800 },
+            totalCachedReadTokens: { type: 'integer', example: 2400 },
+            totalCachedWriteTokens: { type: 'integer', example: 0 },
+            totalThoughtTokens: { type: 'integer', example: 900 },
+            totalTokens: { type: 'integer', example: 69700 },
+            firstRecordedAt: { type: 'integer', nullable: true, example: 1741000001000 },
+            lastRecordedAt: { type: 'integer', nullable: true, example: 1741086399000 },
+          },
+          required: [
+            'conversationCount',
+            'replyCount',
+            'totalInputTokens',
+            'totalOutputTokens',
+            'totalCachedReadTokens',
+            'totalCachedWriteTokens',
+            'totalThoughtTokens',
+            'totalTokens',
+          ],
+        },
+        ConversationUsageMonitorGroup: {
+          type: 'object',
+          properties: {
+            agent: { type: 'string', nullable: true, example: 'acp' },
+            backend: { type: 'string', nullable: true, example: 'claude' },
+            summary: { $ref: '#/components/schemas/ConversationUsageMonitorSummary' },
+          },
+          required: ['summary'],
+        },
+        ConversationUsageResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            sessionId: { type: 'string', example: 'conv_1741000000000' },
+            conversationType: { type: 'string', example: 'acp' },
+            backend: { type: 'string', nullable: true, example: 'claude' },
+            range: { $ref: '#/components/schemas/ConversationTokenUsageRange' },
+            summary: { $ref: '#/components/schemas/ConversationTokenUsageSummary' },
+            replies: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/ConversationTokenUsageRecord' },
+            },
+            total: { type: 'integer', example: 3 },
+            page: { type: 'integer', example: 0 },
+            pageSize: { type: 'integer', example: 50 },
+            hasMore: { type: 'boolean', example: false },
+          },
+          required: ['success', 'sessionId', 'conversationType', 'range', 'summary', 'replies', 'total', 'page', 'pageSize', 'hasMore'],
+        },
+        ConversationUsageSummaryListResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            range: { $ref: '#/components/schemas/ConversationTokenUsageRange' },
+            total: { type: 'integer', example: 2 },
+            items: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  sessionId: { type: 'string', example: 'conv_1741000000000' },
+                  conversationType: { type: 'string', example: 'acp' },
+                  backend: { type: 'string', nullable: true, example: 'claude' },
+                  summary: { $ref: '#/components/schemas/ConversationTokenUsageSummary' },
+                },
+                required: ['sessionId', 'conversationType', 'summary'],
+              },
+            },
+            notFoundSessionIds: {
+              type: 'array',
+              items: { type: 'string' },
+              example: ['conv_missing_001'],
+            },
+          },
+          required: ['success', 'range', 'total', 'items', 'notFoundSessionIds'],
+        },
+        ConversationUsageMonitorResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', example: true },
+            range: { $ref: '#/components/schemas/ConversationTokenUsageRange' },
+            summary: { $ref: '#/components/schemas/ConversationUsageMonitorSummary' },
+            groups: {
+              type: 'object',
+              properties: {
+                byAgent: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/ConversationUsageMonitorGroup' },
+                },
+                byBackend: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/ConversationUsageMonitorGroup' },
+                },
+                byAgentBackend: {
+                  type: 'array',
+                  items: { $ref: '#/components/schemas/ConversationUsageMonitorGroup' },
+                },
+              },
+              required: ['byAgent', 'byBackend', 'byAgentBackend'],
+            },
+          },
+          required: ['success', 'range', 'summary', 'groups'],
+        },
         SimulationRequest: {
           type: 'object',
           properties: {
@@ -495,6 +664,133 @@ export function buildOpenApiSpec(): Record<string, any> {
                 },
               },
             },
+          },
+        },
+      },
+      '/api/v1/conversation/usage': {
+        get: {
+          tags: ['Conversation API'],
+          summary: 'Get conversation token usage summary and per-reply records',
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: 'sessionId',
+              in: 'query',
+              required: true,
+              schema: { type: 'string' },
+            },
+            {
+              name: 'page',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', default: 0 },
+            },
+            {
+              name: 'pageSize',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', default: 50, maximum: 100 },
+            },
+            {
+              name: 'startTime',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', example: 1741000000000 },
+              description: 'Optional millisecond timestamp. Filters usage records created at or after this time.',
+            },
+            {
+              name: 'endTime',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', example: 1741086399999 },
+              description: 'Optional millisecond timestamp. Filters usage records created at or before this time.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Structured token usage result',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ConversationUsageResponse' },
+                },
+              },
+            },
+            404: { description: 'Conversation not found', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
+      '/api/v1/conversation/usage/list': {
+        get: {
+          tags: ['Conversation API'],
+          summary: 'Get token usage summaries for multiple conversations',
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: 'sessionIds',
+              in: 'query',
+              required: true,
+              schema: { type: 'string', example: 'conv_1,conv_2,conv_3' },
+              description: 'Comma-separated conversation session IDs.',
+            },
+            {
+              name: 'startTime',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', example: 1741000000000 },
+              description: 'Optional millisecond timestamp. Filters usage records created at or after this time.',
+            },
+            {
+              name: 'endTime',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', example: 1741086399999 },
+              description: 'Optional millisecond timestamp. Filters usage records created at or before this time.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Batch token usage summaries',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ConversationUsageSummaryListResponse' },
+                },
+              },
+            },
+            400: { description: 'Bad request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
+          },
+        },
+      },
+      '/api/v1/conversation/usage/monitor': {
+        get: {
+          tags: ['Conversation API'],
+          summary: 'Get usage monitoring aggregates grouped by agent and backend',
+          security: [{ BearerAuth: [] }],
+          parameters: [
+            {
+              name: 'startTime',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', example: 1741000000000 },
+              description: 'Optional millisecond timestamp. Includes usage records created at or after this time.',
+            },
+            {
+              name: 'endTime',
+              in: 'query',
+              required: false,
+              schema: { type: 'integer', example: 1741086399999 },
+              description: 'Optional millisecond timestamp. Includes usage records created at or before this time.',
+            },
+          ],
+          responses: {
+            200: {
+              description: 'Usage monitoring aggregates',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ConversationUsageMonitorResponse' },
+                },
+              },
+            },
+            400: { description: 'Bad request', content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorResponse' } } } },
           },
         },
       },

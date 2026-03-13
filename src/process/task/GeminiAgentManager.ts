@@ -9,7 +9,7 @@ import { ipcBridge } from '@/common';
 import type { CronMessageMeta, IMessageText, IMessageToolGroup, TMessage } from '@/common/chatLib';
 import { transformMessage } from '@/common/chatLib';
 import type { IResponseMessage } from '@/common/ipcBridge';
-import type { IMcpServer, TProviderWithModel } from '@/common/storage';
+import type { IMcpServer, TProviderWithModel, TokenUsageData } from '@/common/storage';
 import { ProcessConfig, getSkillsDir } from '@/process/initStorage';
 import { ExtensionRegistry } from '@/extensions';
 import { buildSystemInstructionsWithSkillsIndex } from './agentUtils';
@@ -103,6 +103,13 @@ export class GeminiAgentManager extends BaseAgentManager<
   /** Stored webSearchEngine for worker re-bootstrap / 保存 webSearchEngine 用于重建 worker */
   private webSearchEngine?: 'google' | 'default';
   private lastProcessedFinishMessageKey: string | null = null;
+  private pendingUsageMetadata: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    totalTokenCount?: number;
+    cachedContentTokenCount?: number;
+  } | null = null;
+  private currentAssistantMessageId: string | null = null;
 
   constructor(
     data: {
@@ -571,12 +578,15 @@ export class GeminiAgentManager extends BaseAgentManager<
       }
 
       if (data.type === 'finish') {
+        this.persistCurrentTurnTokenUsage();
         // When stream finishes, check for cron commands in the accumulated message
         // Use longer delay and retry logic to ensure message is persisted
         this.checkCronWithRetry(0);
       }
       if (data.type === 'start') {
         this.status = 'running';
+        this.pendingUsageMetadata = null;
+        this.currentAssistantMessageId = null;
         const traceData = {
           agentType: 'gemini' as const,
           provider: this.model.name,
@@ -610,9 +620,26 @@ export class GeminiAgentManager extends BaseAgentManager<
         const tMessage = transformMessage(data as IResponseMessage);
         if (tMessage) {
           addOrUpdateMessage(this.conversation_id, tMessage, 'gemini');
+          if (tMessage.position === 'left') {
+            this.currentAssistantMessageId = tMessage.msg_id || tMessage.id;
+          }
           if (tMessage.type === 'tool_group') {
             this.handleConformationMessage(tMessage);
           }
+        }
+      }
+
+      if (data.type === 'finished') {
+        const finishedData = data.data as {
+          usageMetadata?: {
+            promptTokenCount?: number;
+            candidatesTokenCount?: number;
+            totalTokenCount?: number;
+            cachedContentTokenCount?: number;
+          };
+        } | null;
+        if (finishedData?.usageMetadata) {
+          this.pendingUsageMetadata = finishedData.usageMetadata;
         }
       }
 
@@ -748,6 +775,57 @@ export class GeminiAgentManager extends BaseAgentManager<
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private persistCurrentTurnTokenUsage(): void {
+    const usageMetadata = this.pendingUsageMetadata;
+    if (!usageMetadata) {
+      return;
+    }
+
+    const totalTokens = usageMetadata.totalTokenCount || 0;
+    if (totalTokens <= 0) {
+      this.pendingUsageMetadata = null;
+      return;
+    }
+
+    const db = getDatabase();
+    const result = db.recordConversationTokenUsage({
+      conversationId: this.conversation_id,
+      backend: 'gemini',
+      assistantMessageId: this.currentAssistantMessageId ?? undefined,
+      inputTokens: usageMetadata.promptTokenCount || 0,
+      outputTokens: usageMetadata.candidatesTokenCount || 0,
+      cachedReadTokens: usageMetadata.cachedContentTokenCount || 0,
+      cachedWriteTokens: 0,
+      thoughtTokens: 0,
+      totalTokens,
+    });
+
+    if (!result.success) {
+      mainWarn('[GeminiAgentManager]', 'Failed to persist conversation token usage', result.error);
+    }
+
+    this.saveTokenUsageToConversationExtra({ totalTokens });
+    this.pendingUsageMetadata = null;
+    this.currentAssistantMessageId = null;
+  }
+
+  private saveTokenUsageToConversationExtra(tokenUsage: TokenUsageData): void {
+    try {
+      const db = getDatabase();
+      const result = db.getConversation(this.conversation_id);
+      if (result.success && result.data && result.data.type === 'gemini') {
+        const conversation = result.data;
+        const updatedExtra = {
+          ...conversation.extra,
+          lastTokenUsage: tokenUsage,
+        };
+        db.updateConversation(this.conversation_id, { extra: updatedExtra } as Partial<typeof conversation>);
+      }
+    } catch (error) {
+      mainWarn('[GeminiAgentManager]', 'Failed to save token usage', error);
     }
   }
 

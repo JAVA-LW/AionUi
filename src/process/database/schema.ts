@@ -80,6 +80,34 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at);
   `);
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS conversation_token_usage (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      backend TEXT NOT NULL,
+      reply_index INTEGER NOT NULL,
+      assistant_message_id TEXT,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cached_read_tokens INTEGER NOT NULL DEFAULT 0,
+      cached_write_tokens INTEGER NOT NULL DEFAULT 0,
+      thought_tokens INTEGER NOT NULL DEFAULT 0,
+      total_tokens INTEGER NOT NULL DEFAULT 0,
+      context_used INTEGER,
+      context_size INTEGER,
+      session_cost_amount REAL,
+      session_cost_currency TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
+      UNIQUE (conversation_id, reply_index)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_conversation_token_usage_conversation_id ON conversation_token_usage(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_conversation_token_usage_reply_index ON conversation_token_usage(conversation_id, reply_index DESC);
+    CREATE INDEX IF NOT EXISTS idx_conversation_token_usage_created_at ON conversation_token_usage(created_at DESC);
+  `);
+
   // API configuration table (API配置表 - 单例表)
   db.exec(`
     CREATE TABLE IF NOT EXISTS api_config (
@@ -126,4 +154,4 @@ export function setDatabaseVersion(db: Database.Database, version: number): void
  * Current database schema version
  * Update this when adding new migrations in migrations.ts
  */
-export const CURRENT_DB_VERSION = 18;
+export const CURRENT_DB_VERSION = 19;

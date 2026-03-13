@@ -398,4 +398,231 @@ describe('conversationApiRoutes helpers', () => {
 
     expect(cliFiltered.map((item) => item.sessionId)).toEqual(['conv-running']);
   });
+
+  it('builds conversation usage payload with summary and paginated replies', async () => {
+    const { buildConversationUsageResponse } = await import('../../src/webserver/routes/conversationApiRoutes');
+
+    const conversation: MinimalConversation = {
+      id: 'conv-usage',
+      name: 'Usage',
+      type: 'acp',
+      source: 'api',
+      status: 'finished',
+      createTime: 100,
+      modifyTime: 200,
+      extra: { backend: 'claude' },
+    };
+
+    const result = buildConversationUsageResponse(
+      'conv-usage',
+      conversation as never,
+      {
+        conversationId: 'conv-usage',
+        backend: 'claude',
+        replyCount: 2,
+        totalInputTokens: 1200,
+        totalOutputTokens: 300,
+        totalCachedReadTokens: 0,
+        totalCachedWriteTokens: 0,
+        totalThoughtTokens: 50,
+        totalTokens: 1500,
+        latestContextUsed: 8000,
+        latestContextSize: 200000,
+        latestSessionCostAmount: 0.23,
+        latestSessionCostCurrency: 'USD',
+        lastReplyIndex: 2,
+        lastRecordedAt: 500,
+      },
+      {
+        data: [
+          {
+            id: 'usage-2',
+            conversationId: 'conv-usage',
+            backend: 'claude',
+            replyIndex: 2,
+            assistantMessageId: 'msg-2',
+            inputTokens: 700,
+            outputTokens: 180,
+            cachedReadTokens: 0,
+            cachedWriteTokens: 0,
+            thoughtTokens: 20,
+            totalTokens: 880,
+            contextUsed: 8000,
+            contextSize: 200000,
+            sessionCostAmount: 0.23,
+            sessionCostCurrency: 'USD',
+            createdAt: 500,
+            updatedAt: 500,
+          },
+        ],
+        total: 2,
+        page: 0,
+        pageSize: 1,
+        hasMore: true,
+      }
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        success: true,
+        sessionId: 'conv-usage',
+        conversationType: 'acp',
+        backend: 'claude',
+        range: {},
+        total: 2,
+        page: 0,
+        pageSize: 1,
+        hasMore: true,
+      })
+    );
+    expect(result.summary.totalTokens).toBe(1500);
+    expect(result.replies[0].replyIndex).toBe(2);
+  });
+
+  it('builds batch conversation usage summary payload', async () => {
+    const { buildConversationUsageSummaryListResponse } = await import('../../src/webserver/routes/conversationApiRoutes');
+
+    const result = buildConversationUsageSummaryListResponse(
+      [
+        {
+          sessionId: 'conv-usage-1',
+          conversationType: 'acp',
+          backend: 'claude',
+          summary: {
+            conversationId: 'conv-usage-1',
+            backend: 'claude',
+            replyCount: 1,
+            totalInputTokens: 100,
+            totalOutputTokens: 50,
+            totalCachedReadTokens: 0,
+            totalCachedWriteTokens: 0,
+            totalThoughtTokens: 10,
+            totalTokens: 150,
+          },
+        },
+      ],
+      ['conv-missing']
+    );
+
+    expect(result).toEqual({
+      success: true,
+      range: {},
+      total: 1,
+      items: [
+        expect.objectContaining({
+          sessionId: 'conv-usage-1',
+          conversationType: 'acp',
+          backend: 'claude',
+        }),
+      ],
+      notFoundSessionIds: ['conv-missing'],
+    });
+  });
+
+  it('builds usage monitor payload with overall and grouped aggregates', async () => {
+    const { buildConversationUsageMonitorResponse } = await import('../../src/webserver/routes/conversationApiRoutes');
+
+    const result = buildConversationUsageMonitorResponse({
+      range: {
+        startTime: 1741824000000,
+        endTime: 1741910400000,
+      },
+      summary: {
+        conversationCount: 3,
+        replyCount: 6,
+        totalInputTokens: 1800,
+        totalOutputTokens: 700,
+        totalCachedReadTokens: 100,
+        totalCachedWriteTokens: 0,
+        totalThoughtTokens: 50,
+        totalTokens: 2650,
+        firstRecordedAt: 1741824001000,
+        lastRecordedAt: 1741910399000,
+      },
+      groups: {
+        byAgent: [
+          {
+            agent: 'acp',
+            summary: {
+              conversationCount: 2,
+              replyCount: 4,
+              totalInputTokens: 1200,
+              totalOutputTokens: 500,
+              totalCachedReadTokens: 100,
+              totalCachedWriteTokens: 0,
+              totalThoughtTokens: 50,
+              totalTokens: 1850,
+              firstRecordedAt: 1741824001000,
+              lastRecordedAt: 1741910399000,
+            },
+          },
+        ],
+        byBackend: [
+          {
+            backend: 'claude',
+            summary: {
+              conversationCount: 2,
+              replyCount: 4,
+              totalInputTokens: 1200,
+              totalOutputTokens: 500,
+              totalCachedReadTokens: 100,
+              totalCachedWriteTokens: 0,
+              totalThoughtTokens: 50,
+              totalTokens: 1850,
+              firstRecordedAt: 1741824001000,
+              lastRecordedAt: 1741910399000,
+            },
+          },
+        ],
+        byAgentBackend: [
+          {
+            agent: 'acp',
+            backend: 'claude',
+            summary: {
+              conversationCount: 2,
+              replyCount: 4,
+              totalInputTokens: 1200,
+              totalOutputTokens: 500,
+              totalCachedReadTokens: 100,
+              totalCachedWriteTokens: 0,
+              totalThoughtTokens: 50,
+              totalTokens: 1850,
+              firstRecordedAt: 1741824001000,
+              lastRecordedAt: 1741910399000,
+            },
+          },
+        ],
+      },
+    });
+
+    expect(result).toEqual({
+      success: true,
+      range: {
+        startTime: 1741824000000,
+        endTime: 1741910400000,
+      },
+      summary: expect.objectContaining({
+        conversationCount: 3,
+        totalTokens: 2650,
+      }),
+      groups: {
+        byAgent: [
+          expect.objectContaining({
+            agent: 'acp',
+          }),
+        ],
+        byBackend: [
+          expect.objectContaining({
+            backend: 'claude',
+          }),
+        ],
+        byAgentBackend: [
+          expect.objectContaining({
+            agent: 'acp',
+            backend: 'claude',
+          }),
+        ],
+      },
+    });
+  });
 });

@@ -8,7 +8,7 @@ import { transformMessage } from '@/common/chatLib';
 import { AIONUI_FILES_MARKER } from '@/common/constants';
 import type { IResponseMessage } from '@/common/ipcBridge';
 import { parseError, uuid } from '@/common/utils';
-import type { AcpBackend, AcpModelInfo, AcpPermissionOption, AcpPermissionRequest, AcpSessionConfigOption } from '@/types/acpTypes';
+import type { AcpBackend, AcpModelInfo, AcpPermissionOption, AcpPermissionRequest, AcpPromptResponseUsage, AcpSessionConfigOption } from '@/types/acpTypes';
 import { ACP_BACKENDS_ALL } from '@/types/acpTypes';
 import { ExtensionRegistry } from '@/extensions';
 import { getDatabase } from '@process/database';
@@ -71,6 +71,8 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
   private currentMode: string = 'default';
   private persistedModelId: string | null = null;
   private persistedConfigOptionValues: Record<string, string>;
+  private pendingPromptUsage: AcpPromptResponseUsage | null = null;
+  private pendingContextUsage: { used: number; size: number; cost?: { amount: number; currency: string } } | null = null;
   // Track current message for cron detection (accumulated from streaming chunks)
   private currentMsgId: string | null = null;
   private currentMsgContent: string = '';
@@ -269,6 +271,9 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           acpSessionId: data.acpSessionId,
           acpSessionUpdatedAt: data.acpSessionUpdatedAt,
         },
+        onPromptUsage: (usage) => {
+          this.pendingPromptUsage = usage;
+        },
         onSessionIdUpdate: (sessionId: string) => {
           // Save ACP session ID to database for resume support
           // 保存 ACP session ID 到数据库以支持会话恢复
@@ -323,6 +328,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
 
           // Emit request trace on each model generation start
           if (message.type === 'start') {
+            this.resetCurrentTurnTracking();
             const modelInfo = this.agent?.getModelInfo();
             const traceData = {
               agentType: 'acp' as const,
@@ -342,7 +348,8 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
 
           // Persist context usage to conversation extra for restore on page switch
           if (message.type === 'acp_context_usage') {
-            const usageData = message.data as { used: number; size: number };
+            const usageData = message.data as { used: number; size: number; cost?: { amount: number; currency: string } };
+            this.pendingContextUsage = usageData;
             this.saveContextUsage(usageData);
           }
 
@@ -437,6 +444,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
 
           // Clear busy guard when turn ends
           if (v.type === 'finish') {
+            this.persistCurrentTurnTokenUsage();
             cronBusyGuard.setProcessing(this.conversation_id, false);
           }
 
@@ -1004,6 +1012,53 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
    * Save context usage to database for restore on page switch.
    * 保存上下文使用量到数据库，以便在页面切换时恢复。
    */
+  private resetCurrentTurnTracking(): void {
+    this.pendingPromptUsage = null;
+    this.pendingContextUsage = null;
+    this.currentMsgId = null;
+    this.currentMsgContent = '';
+  }
+
+  private persistCurrentTurnTokenUsage(): void {
+    if (!this.pendingPromptUsage && !this.pendingContextUsage) {
+      return;
+    }
+
+    const promptUsage = this.pendingPromptUsage;
+    const contextUsage = this.pendingContextUsage;
+    const totalTokens = promptUsage?.totalTokens ?? contextUsage?.used ?? 0;
+
+    if (totalTokens <= 0) {
+      this.pendingPromptUsage = null;
+      this.pendingContextUsage = null;
+      return;
+    }
+
+    const db = getDatabase();
+    const result = db.recordConversationTokenUsage({
+      conversationId: this.conversation_id,
+      backend: this.options.backend,
+      assistantMessageId: this.currentMsgId ?? undefined,
+      inputTokens: promptUsage?.inputTokens ?? 0,
+      outputTokens: promptUsage?.outputTokens ?? 0,
+      cachedReadTokens: promptUsage?.cachedReadTokens ?? 0,
+      cachedWriteTokens: promptUsage?.cachedWriteTokens ?? 0,
+      thoughtTokens: promptUsage?.thoughtTokens ?? 0,
+      totalTokens,
+      contextUsed: contextUsage?.used,
+      contextSize: contextUsage && contextUsage.size > 0 ? contextUsage.size : undefined,
+      sessionCostAmount: contextUsage?.cost?.amount,
+      sessionCostCurrency: contextUsage?.cost?.currency,
+    });
+
+    if (!result.success) {
+      mainWarn('[AcpAgentManager]', 'Failed to persist conversation token usage', result.error);
+    }
+
+    this.pendingPromptUsage = null;
+    this.pendingContextUsage = null;
+  }
+
   private saveContextUsage(usage: { used: number; size: number }): void {
     try {
       const db = getDatabase();

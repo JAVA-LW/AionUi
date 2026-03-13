@@ -15,6 +15,7 @@ import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { formatStatusLastMessage, getConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
 import { ipcBridge } from '@/common';
 import type { TChatConversation, TProviderWithModel } from '@/common/storage';
+import type { ConversationTokenUsageMonitorResult, ConversationTokenUsageRange, ConversationTokenUsageRecord, ConversationTokenUsageSummary } from '@/common/tokenUsage';
 import { uuid } from '@/common/utils';
 import { buildConversationTitleFromMessage } from '@/common/utils/conversationTitle';
 
@@ -55,6 +56,28 @@ const parseOptionalBoolean = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
+const parseOptionalInteger = (value: unknown): number | undefined => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.trunc(value);
+  }
+
+  if (typeof value !== 'string') {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+
+  if (!/^-?\d+$/.test(trimmed)) {
+    return undefined;
+  }
+
+  const parsed = Number.parseInt(trimmed, 10);
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
 const getFallbackConversationModel = (): TProviderWithModel =>
   ({
     id: 'default-provider',
@@ -78,6 +101,32 @@ const parseListQueryValues = (value: unknown): string[] | undefined => {
     .filter(Boolean);
 
   return items.length > 0 ? items : undefined;
+};
+
+const parseConversationTokenUsageRange = (req: Request): { range?: ConversationTokenUsageRange; error?: string } => {
+  const rawStartTime = req.query?.startTime;
+  const rawEndTime = req.query?.endTime;
+  const startTime = parseOptionalInteger(rawStartTime);
+  const endTime = parseOptionalInteger(rawEndTime);
+
+  if (rawStartTime !== undefined && startTime === undefined) {
+    return { error: 'Invalid startTime query parameter. Expected millisecond timestamp.' };
+  }
+
+  if (rawEndTime !== undefined && endTime === undefined) {
+    return { error: 'Invalid endTime query parameter. Expected millisecond timestamp.' };
+  }
+
+  if (typeof startTime === 'number' && typeof endTime === 'number' && startTime > endTime) {
+    return { error: 'Invalid time range. startTime must be less than or equal to endTime.' };
+  }
+
+  return {
+    range: {
+      startTime,
+      endTime,
+    },
+  };
 };
 
 export type ConversationStatusListItem = {
@@ -114,6 +163,21 @@ type ConversationStatusListFilters = {
   cli?: string[];
   source?: string[];
   canSendMessage?: boolean;
+};
+
+type ConversationUsagePage = {
+  data: ConversationTokenUsageRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasMore: boolean;
+};
+
+type ConversationUsageSummaryListItem = {
+  sessionId: string;
+  conversationType: TChatConversation['type'];
+  backend?: string;
+  summary: ConversationTokenUsageSummary;
 };
 
 type IConversationStatusInput = {
@@ -351,6 +415,33 @@ const isStopConfirmed = (resolvedStatus: { runtime: { taskStatus?: ConversationS
   };
   return !runtime.isProcessing && (runtime.pendingConfirmations ?? 0) === 0 && runtime.taskStatus !== 'running';
 };
+
+export const buildConversationUsageResponse = (sessionId: string, conversation: TChatConversation, summary: ConversationTokenUsageSummary, usagePage: ConversationUsagePage, range: ConversationTokenUsageRange = {}) => ({
+  success: true,
+  sessionId,
+  conversationType: conversation.type,
+  backend: conversation.type === 'acp' ? conversation.extra.backend : undefined,
+  range,
+  summary,
+  replies: usagePage.data,
+  total: usagePage.total,
+  page: usagePage.page,
+  pageSize: usagePage.pageSize,
+  hasMore: usagePage.hasMore,
+});
+
+export const buildConversationUsageSummaryListResponse = (items: ConversationUsageSummaryListItem[], notFoundSessionIds: string[] = [], range: ConversationTokenUsageRange = {}) => ({
+  success: true,
+  range,
+  total: items.length,
+  items,
+  notFoundSessionIds,
+});
+
+export const buildConversationUsageMonitorResponse = (result: ConversationTokenUsageMonitorResult) => ({
+  success: true,
+  ...result,
+});
 
 const waitForStopConfirmed = async (sessionId: string, timeoutMs: number): Promise<void> => {
   const db = getDatabase();
@@ -979,6 +1070,153 @@ router.get('/messages', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[API] Get messages error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/conversation/usage/monitor?startTime={ms}&endTime={ms}
+ * Get usage monitoring aggregates by agent/backend within a time range
+ */
+router.get('/usage/monitor', async (req: Request, res: Response) => {
+  try {
+    const rangeResult = parseConversationTokenUsageRange(req);
+    if (!rangeResult.range) {
+      return res.status(400).json({
+        success: false,
+        error: rangeResult.error || 'Invalid time range query parameters',
+      });
+    }
+
+    const db = getDatabase();
+    const monitorResult = db.getConversationTokenUsageMonitor(rangeResult.range);
+    if (!monitorResult.success || !monitorResult.data) {
+      return res.status(500).json({
+        success: false,
+        error: monitorResult.error || 'Failed to load token usage monitor data',
+      });
+    }
+
+    res.json(buildConversationUsageMonitorResponse(monitorResult.data));
+  } catch (error) {
+    console.error('[API] Get usage monitor error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/conversation/usage?sessionId={sessionId}
+ * Get structured token usage summary and per-reply stats
+ */
+router.get('/usage', async (req: Request, res: Response) => {
+  try {
+    const sessionId = parseSessionIdQuery(req);
+    const page = parseInt((req.query.page as string) || '0');
+    const pageSize = Math.min(parseInt((req.query.pageSize as string) || '50'), 100);
+    const rangeResult = parseConversationTokenUsageRange(req);
+
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing sessionId query parameter',
+      });
+    }
+
+    if (!rangeResult.range) {
+      return res.status(400).json({
+        success: false,
+        error: rangeResult.error || 'Invalid time range query parameters',
+      });
+    }
+
+    const db = getDatabase();
+    const convResult = db.getConversation(sessionId);
+    if (!convResult.success || !convResult.data) {
+      return res.status(404).json({
+        success: false,
+        error: 'Conversation not found',
+      });
+    }
+
+    const summaryResult = db.getConversationTokenUsageSummary(sessionId, rangeResult.range);
+    if (!summaryResult.success || !summaryResult.data) {
+      return res.status(500).json({
+        success: false,
+        error: summaryResult.error || 'Failed to load conversation token usage summary',
+      });
+    }
+
+    const usagePage = db.getConversationTokenUsage(sessionId, page, pageSize, 'DESC', rangeResult.range);
+
+    res.json(buildConversationUsageResponse(sessionId, convResult.data, summaryResult.data, usagePage, rangeResult.range));
+  } catch (error) {
+    console.error('[API] Get usage error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/conversation/usage/list?sessionIds={id1,id2}
+ * Get token usage summary for a batch of conversations
+ */
+router.get('/usage/list', async (req: Request, res: Response) => {
+  try {
+    const sessionIds = parseListQueryValues(req.query?.sessionIds);
+    const rangeResult = parseConversationTokenUsageRange(req);
+
+    if (!sessionIds || sessionIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing sessionIds query parameter',
+      });
+    }
+
+    if (!rangeResult.range) {
+      return res.status(400).json({
+        success: false,
+        error: rangeResult.error || 'Invalid time range query parameters',
+      });
+    }
+
+    const db = getDatabase();
+    const items: ConversationUsageSummaryListItem[] = [];
+    const notFoundSessionIds: string[] = [];
+
+    for (const sessionId of sessionIds) {
+      const convResult = db.getConversation(sessionId);
+      if (!convResult.success || !convResult.data) {
+        notFoundSessionIds.push(sessionId);
+        continue;
+      }
+
+      const summaryResult = db.getConversationTokenUsageSummary(sessionId, rangeResult.range);
+      if (!summaryResult.success || !summaryResult.data) {
+        return res.status(500).json({
+          success: false,
+          error: summaryResult.error || `Failed to load conversation token usage summary for ${sessionId}`,
+        });
+      }
+
+      items.push({
+        sessionId,
+        conversationType: convResult.data.type,
+        backend: convResult.data.type === 'acp' ? convResult.data.extra.backend : undefined,
+        summary: summaryResult.data,
+      });
+    }
+
+    res.json(buildConversationUsageSummaryListResponse(items, notFoundSessionIds, rangeResult.range));
+  } catch (error) {
+    console.error('[API] Get usage list error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',
