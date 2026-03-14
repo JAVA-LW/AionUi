@@ -654,7 +654,7 @@ const ApiSettingsContent: React.FC = () => {
 
       <div className='border-t border-border-secondary my-16px' />
 
-      <div className='mb-20px rounded border border-border-secondary bg-bg-secondary p-12px text-12px text-t-tertiary'>Conversation runtime diagnostics 已迁移到独立扩展页 `API Diagnostics`，方便单独迭代和调试。</div>
+      <div className='mb-20px rounded border border-border-secondary bg-bg-secondary p-12px text-12px text-t-tertiary'>会话运行时诊断能力已迁移到独立扩展页“API 诊断”，方便单独迭代和调试。</div>
 
       <div className='border-t border-border-secondary my-16px' />
 

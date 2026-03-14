@@ -1,7 +1,7 @@
 [
   {
     "id": "runtime-diagnostics",
-    "name": "API Diagnostics",
+    "name": "API 诊断",
     "entryPoint": "settings/api-diagnostics.html",
     "icon": "assets/diagnostics-icon.svg",
     "position": { "anchor": "webui", "placement": "after" },

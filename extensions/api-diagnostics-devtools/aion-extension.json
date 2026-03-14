@@ -1,9 +1,9 @@
 {
   "$schema": "../../schemas/aion-extension-v1.json",
   "name": "api-diagnostics-devtools",
-  "displayName": "API Diagnostics",
+  "displayName": "API 诊断",
   "version": "0.1.0",
-  "description": "Detached runtime diagnostics workbench for the local HTTP API.",
+  "description": "用于本地 HTTP API 的独立运行时诊断工作台。",
   "author": "AionUI Contributors",
   "icon": "assets/diagnostics-icon.svg",
   "contributes": {

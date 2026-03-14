@@ -1,74 +1,74 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>API Diagnostics</title>
+    <title>API 诊断</title>
     <link rel="stylesheet" href="./api-diagnostics.css" />
   </head>
   <body>
     <main class="shell">
       <section class="hero">
         <div>
-          <p class="eyebrow">Runtime inspection</p>
-          <h1>API Diagnostics</h1>
-          <p class="lede">Detached diagnostics workbench for conversation stop cleanup, worker retention, and memory growth in the local HTTP API.</p>
+          <p class="eyebrow">运行时巡检</p>
+          <h1>API 诊断</h1>
+          <p class="lede">用于排查本地 HTTP API 中会话停止清理、Worker 残留和内存增长问题的独立诊断工作台。</p>
         </div>
-        <div class="status" id="status-banner">Waiting for host bridge...</div>
+        <div class="status" id="status-banner">正在等待宿主桥接...</div>
       </section>
 
       <section class="panel">
         <div class="panel-head">
           <div>
-            <h2>Sampling control</h2>
-            <p>These changes are runtime-only and do not modify the normal API settings saved by users.</p>
+            <h2>采样控制</h2>
+            <p>这里的修改仅作用于当前运行期，不会改动用户保存的常规 API 配置。</p>
           </div>
           <label class="toggle-row">
-            <span>Enable diagnostics sampling</span>
+            <span>启用诊断采样</span>
             <input id="enabled" type="checkbox" />
           </label>
         </div>
 
         <div class="form-grid">
           <label class="field">
-            <span>Sample interval (ms)</span>
+            <span>采样间隔 (ms)</span>
             <input id="sample-interval" type="text" inputmode="numeric" placeholder="60000" />
           </label>
           <label class="field">
-            <span>Output directory</span>
+            <span>输出目录</span>
             <input id="output-dir" type="text" placeholder=".aionui/diagnostics/api" />
           </label>
         </div>
 
         <div class="toolbar">
-          <button id="apply-config" class="button button-primary">Apply config</button>
-          <button id="refresh-state" class="button">Refresh state</button>
-          <button id="open-output" class="button">Open output</button>
+          <button id="apply-config" class="button button-primary">应用配置</button>
+          <button id="refresh-state" class="button">刷新状态</button>
+          <button id="open-output" class="button">打开输出目录</button>
         </div>
       </section>
 
       <section class="panel">
         <div class="panel-head compact">
           <div>
-            <h2>Manual capture</h2>
-            <p>Target a single session or keep it empty for a global process snapshot.</p>
+            <h2>手动抓取</h2>
+            <p>可指定单个会话，也可以留空以抓取全局进程快照。</p>
           </div>
           <label class="toggle-row">
-            <span>Persist snapshot to disk</span>
+            <span>将快照落盘</span>
             <input id="persist-snapshot" type="checkbox" checked />
           </label>
         </div>
 
         <div class="form-grid">
           <label class="field field-wide">
-            <span>Session ID</span>
-            <input id="session-id" type="text" placeholder="Leave empty for a global snapshot" />
+            <span>会话 ID</span>
+            <input id="session-id" type="text" placeholder="留空则抓取全局快照" />
           </label>
         </div>
 
         <div class="toolbar">
-          <button id="capture-snapshot" class="button button-accent">Capture snapshot</button>
-          <button id="copy-snapshot" class="button">Copy JSON</button>
+          <button id="capture-snapshot" class="button button-accent">抓取快照</button>
+          <button id="copy-snapshot" class="button">复制 JSON</button>
         </div>
       </section>
 
@@ -78,15 +78,15 @@
           <strong id="summary-rss">--</strong>
         </article>
         <article class="stat-card">
-          <span>Heap used</span>
+          <span>堆已用</span>
           <strong id="summary-heap">--</strong>
         </article>
         <article class="stat-card">
-          <span>Worker tasks</span>
+          <span>Worker 任务</span>
           <strong id="summary-tasks">--</strong>
         </article>
         <article class="stat-card">
-          <span>Message cache</span>
+          <span>消息缓存</span>
           <strong id="summary-cache">--</strong>
         </article>
       </section>
@@ -94,10 +94,10 @@
       <section class="panel">
         <div class="panel-head compact">
           <div>
-            <h2>Recent sample trends</h2>
-            <p>Latest in-memory captures for this app run, including automatic route sampling and manual snapshots.</p>
+            <h2>近期采样趋势</h2>
+            <p>展示本次应用运行期间的最新内存快照，包括自动路由采样和手动抓取结果。</p>
           </div>
-          <div class="window-pill" id="trend-window">Window: 0/20</div>
+          <div class="window-pill" id="trend-window">窗口：0/20</div>
         </div>
 
         <div class="trend-grid" id="trend-grid"></div>
@@ -107,8 +107,8 @@
       <section class="panel">
         <div class="panel-head compact">
           <div>
-            <h2>Snapshot payload</h2>
-            <p id="snapshot-meta">No diagnostics snapshot captured yet.</p>
+            <h2>快照内容</h2>
+            <p id="snapshot-meta">暂未抓取任何诊断快照。</p>
           </div>
         </div>
         <textarea id="snapshot-json" readonly spellcheck="false"></textarea>

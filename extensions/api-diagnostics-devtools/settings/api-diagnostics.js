@@ -40,7 +40,7 @@
     return new Promise((resolve, reject) => {
       const timer = window.setTimeout(() => {
         window.removeEventListener('message', onMessage);
-        reject(new Error(`Host call timed out: ${action}`));
+        reject(new Error(`宿主调用超时：${action}`));
       }, 5000);
 
       const onMessage = (event) => {
@@ -71,13 +71,13 @@
   const invokeHost = async (action, payload) => {
     const envelope = await hostCall(action, payload);
     if (!envelope || envelope.success !== true) {
-      throw new Error((envelope && envelope.error) || `Host bridge failed for ${action}`);
+      throw new Error((envelope && envelope.error) || `宿主桥接调用失败：${action}`);
     }
 
     const bridgeResult = envelope.data;
     if (bridgeResult && typeof bridgeResult === 'object' && Object.prototype.hasOwnProperty.call(bridgeResult, 'success')) {
       if (!bridgeResult.success) {
-        throw new Error(bridgeResult.msg || bridgeResult.error || `Request failed for ${action}`);
+        throw new Error(bridgeResult.msg || bridgeResult.error || `请求失败：${action}`);
       }
       return bridgeResult.data;
     }
@@ -160,8 +160,8 @@
     const previous = summaries[summaries.length - 2];
     const cards = [
       {
-        title: 'RSS trend',
-        subtitle: 'Resident set size across recent samples.',
+        title: 'RSS 趋势',
+        subtitle: '近期采样中的常驻内存变化。',
         color: '#2563eb',
         values: summaries.map((item) => item.rssBytes || 0),
         latest: latest ? latest.rssBytes : undefined,
@@ -169,8 +169,8 @@
         formatter: formatMemoryMb,
       },
       {
-        title: 'Heap used trend',
-        subtitle: 'JS heap growth over the latest captures.',
+        title: '堆内存趋势',
+        subtitle: '最近几次抓取中的 JS 堆变化。',
         color: '#d97706',
         values: summaries.map((item) => item.heapUsedBytes || 0),
         latest: latest ? latest.heapUsedBytes : undefined,
@@ -178,8 +178,8 @@
         formatter: formatMemoryMb,
       },
       {
-        title: 'Worker task trend',
-        subtitle: 'Useful for spotting stop-after task retention.',
+        title: 'Worker 任务趋势',
+        subtitle: '适合观察停止后任务是否残留。',
         color: '#16a34a',
         values: summaries.map((item) => item.totalTasks || 0),
         latest: latest ? latest.totalTasks : undefined,
@@ -187,8 +187,8 @@
         formatter: formatCount,
       },
       {
-        title: 'Cache / in-flight trend',
-        subtitle: 'Message cache size paired with active turn residue.',
+        title: '缓存 / 处理中趋势',
+        subtitle: '消息缓存规模与活跃轮次残留的组合指标。',
         color: '#7c3aed',
         values: summaries.map((item) => (item.messageCacheSize || 0) + (item.inFlightCount || 0)),
         latest: latest ? (latest.messageCacheSize || 0) + (latest.inFlightCount || 0) : undefined,
@@ -200,7 +200,7 @@
     elements.trendGrid.innerHTML = '';
 
     if (!cards.some((card) => card.values.length)) {
-      elements.trendGrid.innerHTML = '<div class="empty">No recent trend data yet. Enable sampling or capture a snapshot to populate the charts.</div>';
+      elements.trendGrid.innerHTML = '<div class="empty">暂时还没有近期趋势数据。启用采样或先抓取一次快照后，这里会展示图表。</div>';
       return;
     }
 
@@ -235,7 +235,7 @@
   const renderTimeline = (summaries) => {
     elements.timeline.innerHTML = '';
     if (!summaries.length) {
-      elements.timeline.innerHTML = '<div class="empty">No captures recorded in this app run.</div>';
+      elements.timeline.innerHTML = '<div class="empty">本次应用运行期间还没有记录到任何抓取结果。</div>';
       return;
     }
 
@@ -247,14 +247,14 @@
         entry.className = 'timeline-item';
         entry.innerHTML = `
           <div>
-            <span>Capture</span>
+            <span>抓取</span>
             <h3>${formatTimestamp(item.timestamp)}</h3>
-            <p>${[item.route, item.reason, item.sessionId || item.state || null].filter(Boolean).join(' · ') || 'Runtime snapshot'}</p>
+            <p>${[item.route, item.reason, item.sessionId || item.state || null].filter(Boolean).join(' / ') || '运行时快照'}</p>
           </div>
           <div><span>RSS</span><strong>${formatMemoryMb(item.rssBytes)}</strong></div>
-          <div><span>Heap</span><strong>${formatMemoryMb(item.heapUsedBytes)}</strong></div>
-          <div><span>Tasks</span><strong>${formatCount(item.totalTasks)}</strong></div>
-          <div><span>Cache</span><strong>${formatCount(item.messageCacheSize)}</strong></div>
+          <div><span>堆</span><strong>${formatMemoryMb(item.heapUsedBytes)}</strong></div>
+          <div><span>任务</span><strong>${formatCount(item.totalTasks)}</strong></div>
+          <div><span>缓存</span><strong>${formatCount(item.messageCacheSize)}</strong></div>
         `;
         elements.timeline.appendChild(entry);
       });
@@ -275,17 +275,17 @@
     elements.summaryHeap.textContent = displayedSummary ? formatMemoryMb(displayedSummary.heapUsedBytes) : '--';
     elements.summaryTasks.textContent = displayedSummary ? formatCount(displayedSummary.totalTasks) : '--';
     elements.summaryCache.textContent = displayedSummary ? formatCount(displayedSummary.messageCacheSize) : '--';
-    elements.trendWindow.textContent = `Window: ${historySummaries.length}/${MAX_WINDOW}`;
+    elements.trendWindow.textContent = `窗口：${historySummaries.length}/${MAX_WINDOW}`;
 
     renderTrendCards(historySummaries);
     renderTimeline(historySummaries);
 
     if (displayedCapture) {
-      const filePart = displayedCapture.filePath ? ` Last file: ${displayedCapture.filePath}` : '';
-      elements.snapshotMeta.textContent = `Last capture: ${formatTimestamp(displayedSummary && displayedSummary.timestamp)}.${filePart}`;
+      const filePart = displayedCapture.filePath ? ` 最近文件：${displayedCapture.filePath}` : '';
+      elements.snapshotMeta.textContent = `最近一次抓取：${formatTimestamp(displayedSummary && displayedSummary.timestamp)}。${filePart}`;
       elements.snapshotJson.value = JSON.stringify(displayedCapture.snapshot, null, 2);
     } else {
-      elements.snapshotMeta.textContent = 'No diagnostics snapshot captured yet.';
+      elements.snapshotMeta.textContent = '暂未抓取任何诊断快照。';
       elements.snapshotJson.value = '{}';
     }
 
@@ -293,7 +293,7 @@
   };
 
   const loadState = async () => {
-    setStatus('Loading diagnostics state...', null);
+    setStatus('正在加载诊断状态...', null);
     try {
       const [config, history] = await Promise.all([invokeHost('application.getApiDiagnosticsState'), invokeHost('application.getApiDiagnosticsHistory', { limit: MAX_WINDOW })]);
       state.config = {
@@ -303,15 +303,15 @@
       };
       state.history = history && Array.isArray(history.captures) ? history.captures : [];
       render();
-      setStatus(`Diagnostics ready. Sampling is ${state.config.enabled ? 'enabled' : 'disabled'}.`, 'success');
+      setStatus(`诊断页面已就绪，当前采样${state.config.enabled ? '已开启' : '未开启'}。`, 'success');
     } catch (error) {
       console.error('[API Diagnostics Extension] Failed to load state:', error);
-      setStatus(error instanceof Error ? error.message : 'Failed to load diagnostics state.', 'error');
+      setStatus(error instanceof Error ? error.message : '加载诊断状态失败。', 'error');
     }
   };
 
   const applyConfig = async () => {
-    setStatus('Applying runtime diagnostics config...', null);
+    setStatus('正在应用运行时诊断配置...', null);
     try {
       const nextConfig = await invokeHost('application.updateApiDiagnosticsConfig', {
         enabled: elements.enabled.checked,
@@ -325,15 +325,15 @@
         sampleIntervalMs: (nextConfig && nextConfig.sampleIntervalMs) || 60000,
       };
       render();
-      setStatus('Diagnostics config applied for this app run.', 'success');
+      setStatus('诊断配置已应用到当前运行实例。', 'success');
     } catch (error) {
       console.error('[API Diagnostics Extension] Failed to apply config:', error);
-      setStatus(error instanceof Error ? error.message : 'Failed to apply diagnostics config.', 'error');
+      setStatus(error instanceof Error ? error.message : '应用诊断配置失败。', 'error');
     }
   };
 
   const captureSnapshot = async () => {
-    setStatus('Capturing runtime snapshot...', null);
+    setStatus('正在抓取运行时快照...', null);
     try {
       state.sessionId = elements.sessionId.value.trim();
       state.persist = elements.persistSnapshot.checked;
@@ -345,10 +345,10 @@
 
       state.lastCapture = capture || null;
       await loadState();
-      setStatus(state.persist ? 'Diagnostics snapshot captured and written to disk.' : 'Diagnostics snapshot captured.', 'success');
+      setStatus(state.persist ? '诊断快照已抓取并写入磁盘。' : '诊断快照已抓取。', 'success');
     } catch (error) {
       console.error('[API Diagnostics Extension] Failed to capture snapshot:', error);
-      setStatus(error instanceof Error ? error.message : 'Failed to capture diagnostics snapshot.', 'error');
+      setStatus(error instanceof Error ? error.message : '抓取诊断快照失败。', 'error');
     }
   };
 
@@ -356,26 +356,26 @@
     const displayedCapture = getDisplayedCapture();
     const targetPath = (displayedCapture && displayedCapture.filePath) || state.config.outputDir;
     if (!targetPath) {
-      setStatus('No diagnostics output path is available yet.', 'error');
+      setStatus('当前还没有可用的诊断输出路径。', 'error');
       return;
     }
 
     try {
       await invokeHost('shell.showItemInFolder', targetPath);
-      setStatus('Opened diagnostics output in the host file manager.', 'success');
+      setStatus('已在宿主文件管理器中打开诊断输出位置。', 'success');
     } catch (error) {
       console.error('[API Diagnostics Extension] Failed to open output:', error);
-      setStatus(error instanceof Error ? error.message : 'Failed to open diagnostics output.', 'error');
+      setStatus(error instanceof Error ? error.message : '打开诊断输出位置失败。', 'error');
     }
   };
 
   const copySnapshot = async () => {
     try {
       await navigator.clipboard.writeText(elements.snapshotJson.value || '{}');
-      setStatus('Snapshot JSON copied to clipboard.', 'success');
+      setStatus('快照 JSON 已复制到剪贴板。', 'success');
     } catch (error) {
       console.error('[API Diagnostics Extension] Failed to copy snapshot:', error);
-      setStatus('Failed to copy snapshot JSON.', 'error');
+      setStatus('复制快照 JSON 失败。', 'error');
     }
   };
 
