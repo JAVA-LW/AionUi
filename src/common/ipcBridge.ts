@@ -21,8 +21,12 @@ import type {
   AutoUpdateStatus,
 } from './updateTypes';
 import type { ProtocolDetectionRequest, ProtocolDetectionResponse } from './utils/protocolDetector';
+import type { WorkspaceEditorTarget } from './workspaceEditor';
 
 export const shell = {
+  openWorkspaceInEditor: bridge.buildProvider<void, { workspace: string; target: WorkspaceEditorTarget }>(
+    'open-workspace-in-editor'
+  ),
   openFile: bridge.buildProvider<void, string>('open-file'), // 使用系统默认程序打开文件
   showItemInFolder: bridge.buildProvider<void, string>('show-item-in-folder'), // 打开文件夹
   openExternal: bridge.buildProvider<void, string>('open-external'), // 使用系统默认程序打开外部链接

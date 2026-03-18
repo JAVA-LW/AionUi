@@ -62,6 +62,7 @@ export default defineConfig({
         'src/process/bridge/conversationBridge.ts',
         'src/process/bridge/updateBridge.ts',
         'src/process/bridge/applicationBridge.ts',
+        'src/process/utils/workspaceEditor.ts',
         'src/utils/configureChromium.ts',
         // ACP
         'src/agent/acp/AcpAdapter.ts',
@@ -72,6 +73,7 @@ export default defineConfig({
         'src/common/chatLib.ts',
         'src/common/update/models/VersionInfo.ts',
         'src/common/appEnv.ts',
+        'src/common/workspaceEditor.ts',
         // Channels
         'src/channels/core/ChannelServiceRegistry.ts',
         // Renderer utils
