@@ -320,6 +320,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         },
         onStreamEvent: (message) => {
           const pipelineStart = Date.now();
+          cronBusyGuard.touchActivity(this.conversation_id);
 
           // Reduce status noise: show full lifecycle only for the first turn.
           // After first turn, only keep failure statuses to avoid reconnect chatter.
@@ -441,6 +442,9 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         },
         onSignalEvent: async (v) => {
           let shouldNotifyTurnCompleted = v.type === 'finish';
+          if (v.type !== 'finish') {
+            cronBusyGuard.touchActivity(this.conversation_id);
+          }
           // Flush buffered text chunks before handling turn-level signals
           this.flushBufferedStreamTextMessages();
 

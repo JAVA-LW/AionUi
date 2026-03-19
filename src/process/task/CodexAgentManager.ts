@@ -603,6 +603,10 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
   emitAndPersistMessage(message: IResponseMessage, persist: boolean = true): void {
     message.conversation_id = this.conversation_id;
 
+    if (message.type !== 'finish') {
+      cronBusyGuard.touchActivity(this.conversation_id);
+    }
+
     // Intercept codex_model_info: cache model name, emit to frontend, skip DB persistence
     if (message.type === 'codex_model_info') {
       const modelData = message.data as { model: string };
