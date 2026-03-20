@@ -1,12 +1,12 @@
-import { AcpAgent } from '@/agent/acp';
-import { channelEventBus } from '@/channels/agent/ChannelEventBus';
+import { AcpAgent } from '@process/agent/acp';
+import { channelEventBus } from '@process/channels/agent/ChannelEventBus';
 import { ipcBridge } from '@/common';
-import type { CronMessageMeta, TMessage } from '@/common/chatLib';
-import { isCodexAutoApproveMode } from '@/common/codex/codexModes';
-import type { SlashCommandItem } from '@/common/slash/types';
-import { transformMessage } from '@/common/chatLib';
-import { AIONUI_FILES_MARKER } from '@/common/constants';
-import type { IResponseMessage } from '@/common/ipcBridge';
+import type { CronMessageMeta, TMessage } from '@/common/chat/chatLib';
+import { isCodexAutoApproveMode } from '@/common/types/codex/codexModes';
+import type { SlashCommandItem } from '@/common/chat/slash/types';
+import { transformMessage } from '@/common/chat/chatLib';
+import { AIONUI_FILES_MARKER } from '@/common/config/constants';
+import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import { parseError, uuid } from '@/common/utils';
 import type {
   AcpBackend,
@@ -15,13 +15,13 @@ import type {
   AcpPermissionRequest,
   AcpPromptResponseUsage,
   AcpSessionConfigOption,
-} from '@/types/acpTypes';
-import { ACP_BACKENDS_ALL } from '@/types/acpTypes';
-import { ExtensionRegistry } from '@/extensions';
-import { getDatabase } from '@process/database';
-import { ProcessConfig } from '../initStorage';
-import { addMessage, addOrUpdateMessage, nextTickToLocalFinish } from '../message';
-import { handlePreviewOpenEvent } from '../utils/previewUtils';
+} from '@/common/types/acpTypes';
+import { ACP_BACKENDS_ALL } from '@/common/types/acpTypes';
+import { ExtensionRegistry } from '@process/extensions';
+import { getDatabase } from '@process/services/database';
+import { ProcessConfig } from '@process/utils/initStorage';
+import { addMessage, addOrUpdateMessage, nextTickToLocalFinish } from '@process/utils/message';
+import { handlePreviewOpenEvent } from '@process/utils/previewUtils';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { ConversationTurnCompletionService } from '@process/services/ConversationTurnCompletionService';
 import {
@@ -29,7 +29,7 @@ import {
   writeCodexSandboxMode,
   type CodexSandboxMode,
 } from '@process/utils/codexConfig';
-import { mainLog, mainWarn, mainError } from '../utils/mainLogger';
+import { mainLog, mainWarn, mainError } from '@process/utils/mainLogger';
 import { prepareFirstMessageWithSkillsIndex } from './agentUtils';
 /** Enable ACP performance diagnostics via ACP_PERF=1 */
 const ACP_PERF_LOG = process.env.ACP_PERF === '1';
@@ -672,13 +672,11 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           contentToSend = contentToSend.split(AIONUI_FILES_MARKER)[0].trimEnd();
         }
 
-        // 首条消息时注入预设规则和 skills 索引（来自智能助手配置）
-        // Inject preset context and skills INDEX on first message (from smart assistant config)
-        if (this.isFirstMessage) {
-          contentToSend = await prepareFirstMessageWithSkillsIndex(contentToSend, {
-            presetContext: this.options.presetContext,
-            enabledSkills: this.options.enabledSkills,
-          });
+        // 首条消息时注入预设规则（来自智能助手配置）
+        // Inject preset context on first message (from smart assistant config)
+        // Skills are handled natively via workspace symlinks + activate_skill — no injection needed
+        if (this.isFirstMessage && this.options.presetContext) {
+          contentToSend = `[Assistant Rules - You MUST follow these instructions]\n${this.options.presetContext}\n\n[User Request]\n${contentToSend}`;
         }
 
         const agentSendStart = Date.now();

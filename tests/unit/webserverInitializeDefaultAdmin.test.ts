@@ -46,7 +46,7 @@ const mockWebServerModuleDeps = () => {
   vi.doMock('os', () => ({
     networkInterfaces: vi.fn(() => ({})),
   }));
-  vi.doMock('@/webserver/config/constants', () => ({
+  vi.doMock('@process/webserver/config/constants', () => ({
     AUTH_CONFIG: {
       DEFAULT_USER: {
         USERNAME: 'admin',
@@ -59,24 +59,24 @@ const mockWebServerModuleDeps = () => {
       setServerConfig: vi.fn(),
     },
   }));
-  vi.doMock('@/webserver/adapter', () => ({
+  vi.doMock('@process/webserver/adapter', () => ({
     initWebAdapter: vi.fn(),
   }));
-  vi.doMock('@/webserver/setup', () => ({
+  vi.doMock('@process/webserver/setup', () => ({
     setupBasicMiddleware: vi.fn(),
     setupCors: vi.fn(),
     setupErrorHandler: vi.fn(),
   }));
-  vi.doMock('@/webserver/routes/authRoutes', () => ({
+  vi.doMock('@process/webserver/routes/authRoutes', () => ({
     registerAuthRoutes: vi.fn(),
   }));
-  vi.doMock('@/webserver/routes/apiRoutes', () => ({
+  vi.doMock('@process/webserver/routes/apiRoutes', () => ({
     registerApiRoutes: vi.fn(),
   }));
-  vi.doMock('@/webserver/routes/staticRoutes', () => ({
+  vi.doMock('@process/webserver/routes/staticRoutes', () => ({
     registerStaticRoutes: vi.fn(),
   }));
-  vi.doMock('@/process/bridge/webuiBridge', () => ({
+  vi.doMock('@process/bridge/webuiBridge', () => ({
     generateQRLoginUrlDirect: vi.fn(() => ({
       qrUrl: 'http://localhost:3000/qr-login?token=test',
       expiresAt: 0,
@@ -99,30 +99,34 @@ describe('initializeDefaultAdmin', () => {
 
     const setSystemUserCredentialsMock = vi.fn();
     const createUserMock = vi.fn();
+    const updatePasswordMock = vi.fn();
     const generateRandomPasswordMock = vi.fn(() => 'generated-password');
     const hashPasswordMock = vi.fn(async () => 'hashed-password');
 
-    vi.doMock('@/webserver/auth/repository/UserRepository', () => ({
+    vi.doMock('@process/webserver/auth/repository/UserRepository', () => ({
       UserRepository: {
         getSystemUser: vi.fn(() => makeSystemUser({ username: 'renamed-admin', password_hash: 'existing-hash' })),
+        findByUsername: vi.fn(() => null),
         setSystemUserCredentials: setSystemUserCredentialsMock,
         createUser: createUserMock,
+        updatePassword: updatePasswordMock,
       },
     }));
-    vi.doMock('@/webserver/auth/service/AuthService', () => ({
+    vi.doMock('@process/webserver/auth/service/AuthService', () => ({
       AuthService: {
         generateRandomPassword: generateRandomPasswordMock,
         hashPassword: hashPasswordMock,
       },
     }));
 
-    const { initializeDefaultAdmin } = await import('@/webserver/index');
+    const { initializeDefaultAdmin } = await import('@process/webserver/index');
     await expect(initializeDefaultAdmin()).resolves.toBeNull();
 
     expect(generateRandomPasswordMock).not.toHaveBeenCalled();
     expect(hashPasswordMock).not.toHaveBeenCalled();
     expect(setSystemUserCredentialsMock).not.toHaveBeenCalled();
     expect(createUserMock).not.toHaveBeenCalled();
+    expect(updatePasswordMock).not.toHaveBeenCalled();
   });
 
   it('preserves a custom system username when bootstrapping a missing password', async () => {
@@ -130,22 +134,25 @@ describe('initializeDefaultAdmin', () => {
 
     const setSystemUserCredentialsMock = vi.fn();
     const createUserMock = vi.fn();
+    const updatePasswordMock = vi.fn();
 
-    vi.doMock('@/webserver/auth/repository/UserRepository', () => ({
+    vi.doMock('@process/webserver/auth/repository/UserRepository', () => ({
       UserRepository: {
         getSystemUser: vi.fn(() => makeSystemUser({ username: 'renamed-admin', password_hash: '' })),
+        findByUsername: vi.fn(() => null),
         setSystemUserCredentials: setSystemUserCredentialsMock,
         createUser: createUserMock,
+        updatePassword: updatePasswordMock,
       },
     }));
-    vi.doMock('@/webserver/auth/service/AuthService', () => ({
+    vi.doMock('@process/webserver/auth/service/AuthService', () => ({
       AuthService: {
         generateRandomPassword: vi.fn(() => 'generated-password'),
         hashPassword: vi.fn(async () => 'hashed-password'),
       },
     }));
 
-    const { initializeDefaultAdmin } = await import('@/webserver/index');
+    const { initializeDefaultAdmin } = await import('@process/webserver/index');
     await expect(initializeDefaultAdmin()).resolves.toEqual({
       username: 'renamed-admin',
       password: 'generated-password',
@@ -153,5 +160,6 @@ describe('initializeDefaultAdmin', () => {
 
     expect(setSystemUserCredentialsMock).toHaveBeenCalledWith('renamed-admin', 'hashed-password');
     expect(createUserMock).not.toHaveBeenCalled();
+    expect(updatePasswordMock).not.toHaveBeenCalled();
   });
 });

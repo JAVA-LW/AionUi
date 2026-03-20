@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import os from 'os';
 import path from 'path';
 
 describe('getNpxCacheDir', () => {
@@ -28,6 +29,8 @@ describe('getNpxCacheDir', () => {
   afterEach(() => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
     process.env.LOCALAPPDATA = originalLocalAppData;
+    vi.doUnmock('child_process');
+    vi.doUnmock('fs');
   });
 
   it('returns ~/.npm/_npx on POSIX (macOS/Linux)', async () => {
@@ -41,11 +44,20 @@ describe('getNpxCacheDir', () => {
       execFile: vi.fn(),
     }));
 
-    const os = await import('os');
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('fs')>('fs');
+      const preferredCacheDir = path.join(os.homedir(), '.npm-cache');
+
+      return {
+        ...actual,
+        existsSync: vi.fn((target: string) => target === preferredCacheDir),
+      };
+    });
+
     const { getNpxCacheDir } = await import('@process/utils/shellEnv');
 
     const result = getNpxCacheDir();
-    expect(result).toBe(path.join(os.homedir(), '.npm', '_npx'));
+    expect(result).toBe(path.join(os.homedir(), '.npm-cache', '_npx'));
   });
 
   it('uses LOCALAPPDATA on Windows when set', async () => {
@@ -76,7 +88,6 @@ describe('getNpxCacheDir', () => {
       execFile: vi.fn(),
     }));
 
-    const os = await import('os');
     const { getNpxCacheDir } = await import('@process/utils/shellEnv');
 
     const result = getNpxCacheDir();

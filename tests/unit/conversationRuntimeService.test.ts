@@ -44,7 +44,7 @@ vi.mock('@process/services/cron/CronBusyGuard', () => ({
   },
 }));
 
-vi.mock('@process/message', () => ({
+vi.mock('@process/utils/message', () => ({
   releaseConversationMessageCache,
 }));
 

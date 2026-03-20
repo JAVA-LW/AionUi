@@ -6,13 +6,13 @@
 
 import type { BrowserWindow } from 'electron';
 import { app } from 'electron';
-import { ipcBridge } from '../../common';
-import { getSystemDir, ProcessEnv } from '../initStorage';
-import { copyDirectoryRecursively } from '../utils';
-import { workerTaskManager } from '@process/task/workerTaskManagerSingleton';
-import { getZoomFactor, setZoomFactor } from '../utils/zoom';
-import { getCdpStatus, updateCdpConfig } from '../../utils/configureChromium';
-import { apiDiagnosticsService } from '../services/ApiDiagnosticsService';
+import { ipcBridge } from '@/common';
+import { getSystemDir, ProcessEnv } from '@process/utils/initStorage';
+import { copyDirectoryRecursively } from '@process/utils';
+import type { IWorkerTaskManager } from '@process/task/IWorkerTaskManager';
+import { getZoomFactor, setZoomFactor } from '@process/utils/zoom';
+import { getCdpStatus, updateCdpConfig } from '@process/utils/configureChromium';
+import { apiDiagnosticsService } from '@process/services/ApiDiagnosticsService';
 
 let mainWindowRef: BrowserWindow | null = null;
 
@@ -20,7 +20,7 @@ export function setApplicationMainWindow(win: BrowserWindow): void {
   mainWindowRef = win;
 }
 
-export function initApplicationBridge(): void {
+export function initApplicationBridge(workerTaskManager: IWorkerTaskManager): void {
   ipcBridge.application.restart.provider(() => {
     // 清理所有工作进程
     workerTaskManager.clear();

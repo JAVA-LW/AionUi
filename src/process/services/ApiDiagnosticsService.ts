@@ -15,8 +15,8 @@ import {
   formatStatusLastMessage,
   getReadOnlyConversationStatusSnapshot,
 } from '@process/services/ConversationTurnCompletionService';
-import { getConversationMessageCacheStats } from '@process/message';
-import { getDatabase } from '@process/database';
+import { getConversationMessageCacheStats } from '@process/utils/message';
+import { getDatabase } from '@process/services/database';
 
 type DiagnosticsSnapshotInput = {
   route: string;

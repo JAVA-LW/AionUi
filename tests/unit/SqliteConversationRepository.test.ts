@@ -17,9 +17,9 @@ const mockDb = {
   insertMessage: vi.fn(),
   getUserConversations: vi.fn(),
 };
-vi.mock('@process/database', () => ({ getDatabase: vi.fn(() => mockDb) }));
+vi.mock('@process/services/database', () => ({ getDatabase: vi.fn(() => mockDb) }));
 
-import { SqliteConversationRepository } from '../../src/process/database/SqliteConversationRepository';
+import { SqliteConversationRepository } from '../../src/process/services/database/SqliteConversationRepository';
 
 describe('SqliteConversationRepository', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -67,7 +67,7 @@ describe('SqliteConversationRepository', () => {
     expect(result.total).toBe(1);
     expect(result.data).toHaveLength(1);
     expect(result.hasMore).toBe(false);
-    expect(mockDb.getConversationMessages).toHaveBeenCalledWith('c1', 0, 100);
+    expect(mockDb.getConversationMessages).toHaveBeenCalledWith('c1', 0, 100, undefined);
   });
 
   it('insertMessage calls db.insertMessage', () => {

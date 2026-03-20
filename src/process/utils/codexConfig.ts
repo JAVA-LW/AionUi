@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { isCodexNoSandboxMode } from '@/common/codex/codexModes';
+import { isCodexNoSandboxMode } from '@/common/types/codex/codexModes';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import { homedir } from 'os';
 import { dirname, join } from 'path';

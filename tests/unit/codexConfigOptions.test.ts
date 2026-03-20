@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { getDefaultAcpConfigOptions } from '../../src/common/codex/codexConfigOptions';
+import { getDefaultAcpConfigOptions } from '../../src/common/types/codex/codexConfigOptions';
 import { describe, expect, it } from 'vitest';
 
 describe('codex config options defaults', () => {

@@ -4,23 +4,30 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { CodexAgentManager } from '@/agent/codex';
-import { GeminiAgent, GeminiApprovalStore } from '@/agent/gemini';
-import type { TChatConversation } from '@/common/storage';
-import { getChannelManager } from '@/channels/core/ChannelManager';
-import { getDatabase } from '@process/database';
+import type { CodexAgentManager } from '@process/agent/codex';
+import { GeminiAgent, GeminiApprovalStore } from '@process/agent/gemini';
+import type { TChatConversation } from '@/common/config/storage';
 import type { IAgentManager } from '@process/task/IAgentManager';
 import type { IConversationService } from '@process/services/IConversationService';
 import type { IWorkerTaskManager } from '@process/task/IWorkerTaskManager';
-import { ipcBridge } from '../../common';
-import { getSkillsDir, ProcessChat } from '../initStorage';
+import { ipcBridge } from '@/common';
+import { getSkillsDir, ProcessChat } from '@process/utils/initStorage';
 import type AcpAgentManager from '../task/AcpAgentManager';
 import type { GeminiAgentManager } from '../task/GeminiAgentManager';
 import type OpenClawAgentManager from '../task/OpenClawAgentManager';
 import { prepareFirstMessage } from '../task/agentUtils';
-import { copyFilesToDirectory, readDirectoryRecursive } from '../utils';
-import { computeOpenClawIdentityHash } from '../utils/openclawUtils';
+import { refreshTrayMenu } from '@process/utils/tray';
+import { copyFilesToDirectory, readDirectoryRecursive } from '@process/utils';
+import { computeOpenClawIdentityHash } from '@process/utils/openclawUtils';
 import { migrateConversationToDatabase } from './migrationUtils';
+
+const refreshTrayMenuSafely = async (): Promise<void> => {
+  try {
+    await refreshTrayMenu();
+  } catch (error) {
+    console.warn('[conversationBridge] Failed to refresh tray menu:', error);
+  }
+};
 
 export function initConversationBridge(
   conversationService: IConversationService,
@@ -91,6 +98,7 @@ export function initConversationBridge(
       source: 'aionui', // Mark conversations created by AionUI as aionui
     });
     emitConversationListChanged(conversation, 'created');
+    await refreshTrayMenuSafely();
     return conversation;
   });
 
@@ -133,12 +141,7 @@ export function initConversationBridge(
         return [];
       }
 
-      // Get all conversations from database (get first page with large limit to get all)
-      // NOTE: IConversationService does not expose a listAllConversations method; using getDatabase() directly here.
-      // This will be fully migrated when IConversationService gains a list/query method in a future PR.
-      const db = getDatabase();
-      const allResult = db.getUserConversations(undefined, 0, 10000);
-      let allConversations: TChatConversation[] = allResult.data || [];
+      let allConversations: TChatConversation[] = await conversationService.listAllConversations();
 
       // If database is empty or doesn't have enough conversations, merge with file storage
       const history = await ProcessChat.get('chat.history');
@@ -172,6 +175,7 @@ export function initConversationBridge(
         if (sourceConversationId) {
           emitConversationListChanged({ id: sourceConversationId, source: conversation.source }, 'deleted');
         }
+        await refreshTrayMenuSafely();
         return result;
       } catch (error) {
         console.error('[conversationBridge] Failed to create conversation with conversation:', error);
@@ -193,6 +197,8 @@ export function initConversationBridge(
       // 如果来源不是 aionui（如 telegram），需要清理 channel 相关资源
       if (source && source !== 'aionui') {
         try {
+          // Dynamic import to avoid circular dependency
+          const { getChannelManager } = await import('@process/channels/core/ChannelManager');
           const channelManager = getChannelManager();
           if (channelManager.isInitialized()) {
             await channelManager.cleanupConversation(id);
@@ -207,6 +213,7 @@ export function initConversationBridge(
       if (conversation) {
         emitConversationListChanged(conversation, 'deleted');
       }
+      await refreshTrayMenuSafely();
       return true;
     } catch (error) {
       console.error('[conversationBridge] Failed to remove conversation:', error);
@@ -238,6 +245,11 @@ export function initConversationBridge(
             // ignore kill error, will lazily rebuild later
           }
         }
+
+        if ('name' in updates) {
+          await refreshTrayMenuSafely();
+        }
+
         return true;
       } catch (error) {
         console.error('[conversationBridge] Failed to update conversation:', error);
@@ -309,12 +321,13 @@ export function initConversationBridge(
         },
       }).then((res) => (res ? [res] : []));
     } catch (error) {
-      // 捕获 abort 错误，避免 unhandled rejection
-      // Catch abort errors to avoid unhandled rejection
-      if (error instanceof Error && error.message.includes('aborted')) {
+      // Catch abort / ENOENT errors to avoid unhandled rejection
+      // (bridge provider callbacks have no .catch handler)
+      if (error instanceof Error && (error.message.includes('aborted') || error.message.includes('ENOENT'))) {
         return [];
       }
-      throw error;
+      console.error('[conversationBridge] getWorkspace error:', error);
+      return [];
     }
   });
 

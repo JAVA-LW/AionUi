@@ -29,22 +29,23 @@ const workerManageKillAndDrain = vi.fn(async () => undefined);
 const workerManageGetTaskById = vi.fn(() => undefined);
 const workerManagePeekTaskById = vi.fn(() => undefined);
 const workerManageListTasks = vi.fn(() => []);
+const workerTaskManagerGetOrBuildTask = vi.fn();
 const workerTaskManagerListTasks = vi.fn(() => []);
 const dbGetUserConversations = vi.fn(() => ({ data: [] }));
 const dbGetUserConversationsByStatuses = vi.fn(() => ({ success: true, data: [] }));
 const dbGetConversation = vi.fn(() => ({ success: false, data: undefined }));
 const cronBusyGuardGetAllStates = vi.fn(() => new Map());
 
-vi.mock('../../src/webserver/middleware/apiAuthMiddleware', () => ({
+vi.mock('../../src/process/webserver/middleware/apiAuthMiddleware', () => ({
   validateApiToken: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-vi.mock('../../src/webserver/middleware/security', () => ({
+vi.mock('../../src/process/webserver/middleware/security', () => ({
   apiRateLimiter: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
 
-vi.mock('@process/services/conversationService', () => ({
-  ConversationService: {},
+vi.mock('@process/services/conversationServiceSingleton', () => ({
+  conversationServiceSingleton: {},
 }));
 
 vi.mock('@process/WorkerManage', () => ({
@@ -59,11 +60,12 @@ vi.mock('@process/WorkerManage', () => ({
 vi.mock('@process/task/workerTaskManagerSingleton', () => ({
   workerTaskManager: {
     getTask: vi.fn(() => undefined),
+    getOrBuildTask: workerTaskManagerGetOrBuildTask,
     listTasks: workerTaskManagerListTasks,
   },
 }));
 
-vi.mock('@process/database', () => ({
+vi.mock('@process/services/database', () => ({
   getDatabase: vi.fn(() => ({
     getUserConversations: dbGetUserConversations,
     getUserConversationsByStatuses: dbGetUserConversationsByStatuses,
@@ -139,6 +141,7 @@ describe('conversationApiRoutes helpers', () => {
     workerManagePeekTaskById.mockReturnValue(undefined);
     workerManageListTasks.mockReset();
     workerManageListTasks.mockReturnValue([]);
+    workerTaskManagerGetOrBuildTask.mockReset();
     workerTaskManagerListTasks.mockReset();
     workerTaskManagerListTasks.mockReturnValue([]);
     dbGetUserConversations.mockReset();
@@ -152,7 +155,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('recognizes active snapshots from runtime and non-stopped states', async () => {
-    const { isConversationStatusActive } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { isConversationStatusActive } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     expect(
       isConversationStatusActive({
@@ -195,7 +198,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('resolves generating scope explicitly and falls back to all for explicit status or state filters', async () => {
-    const { resolveConversationStatusListScope } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { resolveConversationStatusListScope } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     expect(
       resolveConversationStatusListScope({
@@ -225,7 +228,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('builds a sorted generating conversation status list by default', async () => {
-    const { buildConversationStatusList } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { buildConversationStatusList } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const conversations: MinimalConversation[] = [
       {
@@ -348,7 +351,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('supports scope and field filters for status list queries', async () => {
-    const { buildConversationStatusList } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { buildConversationStatusList } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const conversations: MinimalConversation[] = [
       {
@@ -537,7 +540,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('collects runtime candidate ids without including idle busy-guard entries', async () => {
-    const { collectConversationStatusCandidateIds } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { collectConversationStatusCandidateIds } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const result = collectConversationStatusCandidateIds(
       [{ id: 'task-1' }, { id: 'task-2' }],
@@ -551,7 +554,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('resolves active status list conversations from runtime candidates instead of scanning full history', async () => {
-    const { getConversationStatusListConversations } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { getConversationStatusListConversations } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const db = {
       getConversation: vi.fn((conversationId: string) => {
@@ -607,7 +610,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('uses full history for non-runtime scopes that need completed sessions', async () => {
-    const { getConversationStatusListConversations } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { getConversationStatusListConversations } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const db = {
       getConversation: vi.fn(),
@@ -641,7 +644,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('builds conversation usage payload with summary and paginated replies', async () => {
-    const { buildConversationUsageResponse } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { buildConversationUsageResponse } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const conversation: MinimalConversation = {
       id: 'conv-usage',
@@ -720,7 +723,7 @@ describe('conversationApiRoutes helpers', () => {
 
   it('builds batch conversation usage summary payload', async () => {
     const { buildConversationUsageSummaryListResponse } =
-      await import('../../src/webserver/routes/conversationApiRoutes');
+      await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const result = buildConversationUsageSummaryListResponse(
       [
@@ -760,7 +763,7 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('builds usage monitor payload with overall and grouped aggregates', async () => {
-    const { buildConversationUsageMonitorResponse } = await import('../../src/webserver/routes/conversationApiRoutes');
+    const { buildConversationUsageMonitorResponse } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const result = buildConversationUsageMonitorResponse({
       range: {

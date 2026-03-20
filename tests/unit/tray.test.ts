@@ -6,6 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+const originalPlatform = process.platform;
+
 // Shared mock instances that survive across dynamic imports
 const mockTrayInstance = {
   setToolTip: vi.fn(),
@@ -26,6 +28,23 @@ const mockNativeImage = {
   resize: vi.fn().mockReturnThis(),
   isEmpty: vi.fn(() => false),
 };
+const mockDock = {
+  show: vi.fn(),
+  hide: vi.fn(),
+};
+
+const createMockWindow = () =>
+  ({
+    isDestroyed: vi.fn(() => false),
+    isMinimized: vi.fn(() => false),
+    restore: vi.fn(),
+    show: vi.fn(),
+    focus: vi.fn(),
+    hide: vi.fn(),
+    webContents: {
+      send: vi.fn(),
+    },
+  }) as any;
 
 // Tray must be a proper constructor for `new Tray(icon)` to work
 class MockTray {
@@ -41,6 +60,7 @@ const mockModules = () => {
       relaunch: vi.fn(),
       exit: vi.fn(),
       quit: vi.fn(),
+      dock: mockDock,
     },
     Tray: MockTray,
     Menu: {
@@ -59,7 +79,7 @@ const mockModules = () => {
     },
   }));
 
-  vi.doMock('@process/i18n', () => ({
+  vi.doMock('@process/services/i18n', () => ({
     default: { t: vi.fn((key: string) => key) },
   }));
 
@@ -67,7 +87,7 @@ const mockModules = () => {
     workerTaskManager: { listTasks: mockListTasks },
   }));
 
-  vi.doMock('@process/database', () => ({
+  vi.doMock('@process/services/database', () => ({
     getDatabase: mockGetDatabase,
   }));
 };
@@ -76,20 +96,22 @@ describe('tray module', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
     mockModules();
   });
 
   afterEach(() => {
+    Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
     vi.doUnmock('electron');
     vi.doUnmock('@/common');
-    vi.doUnmock('@process/i18n');
+    vi.doUnmock('@process/services/i18n');
     vi.doUnmock('@process/task/workerTaskManagerSingleton');
-    vi.doUnmock('@process/database');
+    vi.doUnmock('@process/services/database');
   });
 
   describe('state accessors', () => {
     it('should get/set closeToTrayEnabled', async () => {
-      const { getCloseToTrayEnabled, setCloseToTrayEnabled } = await import('@/process/tray');
+      const { getCloseToTrayEnabled, setCloseToTrayEnabled } = await import('@process/utils/tray');
 
       expect(getCloseToTrayEnabled()).toBe(false);
       setCloseToTrayEnabled(true);
@@ -99,7 +121,7 @@ describe('tray module', () => {
     });
 
     it('should get/set isQuitting', async () => {
-      const { getIsQuitting, setIsQuitting } = await import('@/process/tray');
+      const { getIsQuitting, setIsQuitting } = await import('@process/utils/tray');
 
       expect(getIsQuitting()).toBe(false);
       setIsQuitting(true);
@@ -107,8 +129,8 @@ describe('tray module', () => {
     });
 
     it('should set main window reference', async () => {
-      const { setTrayMainWindow } = await import('@/process/tray');
-      const mockWindow = { show: vi.fn(), focus: vi.fn() } as any;
+      const { setTrayMainWindow } = await import('@process/utils/tray');
+      const mockWindow = createMockWindow();
 
       expect(() => setTrayMainWindow(mockWindow)).not.toThrow();
     });
@@ -116,7 +138,7 @@ describe('tray module', () => {
 
   describe('createOrUpdateTray', () => {
     it('should create a tray with tooltip', async () => {
-      const { createOrUpdateTray } = await import('@/process/tray');
+      const { createOrUpdateTray } = await import('@process/utils/tray');
 
       createOrUpdateTray();
 
@@ -124,7 +146,7 @@ describe('tray module', () => {
     });
 
     it('should be idempotent - second call does not create another tray', async () => {
-      const { createOrUpdateTray } = await import('@/process/tray');
+      const { createOrUpdateTray } = await import('@process/utils/tray');
 
       createOrUpdateTray();
       const firstCallCount = mockTrayInstance.setToolTip.mock.calls.length;
@@ -135,7 +157,7 @@ describe('tray module', () => {
     });
 
     it('should register double-click and click event handlers', async () => {
-      const { createOrUpdateTray } = await import('@/process/tray');
+      const { createOrUpdateTray } = await import('@process/utils/tray');
 
       createOrUpdateTray();
 
@@ -159,7 +181,7 @@ describe('tray module', () => {
       }));
 
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const { createOrUpdateTray } = await import('@/process/tray');
+      const { createOrUpdateTray } = await import('@process/utils/tray');
 
       createOrUpdateTray();
 
@@ -170,7 +192,7 @@ describe('tray module', () => {
 
   describe('destroyTray', () => {
     it('should destroy tray and allow recreation', async () => {
-      const { createOrUpdateTray, destroyTray } = await import('@/process/tray');
+      const { createOrUpdateTray, destroyTray } = await import('@process/utils/tray');
 
       createOrUpdateTray();
       expect(mockTrayInstance.setToolTip).toHaveBeenCalledOnce();
@@ -185,7 +207,7 @@ describe('tray module', () => {
     });
 
     it('should be safe to call when no tray exists', async () => {
-      const { destroyTray } = await import('@/process/tray');
+      const { destroyTray } = await import('@process/utils/tray');
 
       expect(() => destroyTray()).not.toThrow();
       expect(mockTrayInstance.destroy).not.toHaveBeenCalled();
@@ -194,7 +216,7 @@ describe('tray module', () => {
 
   describe('refreshTrayMenu', () => {
     it('should rebuild context menu when tray exists', async () => {
-      const { createOrUpdateTray, refreshTrayMenu } = await import('@/process/tray');
+      const { createOrUpdateTray, refreshTrayMenu } = await import('@process/utils/tray');
 
       createOrUpdateTray();
       // Wait for initial async menu build to complete
@@ -209,7 +231,11 @@ describe('tray module', () => {
     });
 
     it('should be a no-op when no tray exists', async () => {
-      const { refreshTrayMenu } = await import('@/process/tray');
+      const { refreshTrayMenu } = await import('@process/utils/tray');
+
+      // Flush any pending micro-tasks from previous tests, then clear
+      await new Promise((r) => setTimeout(r, 50));
+      mockBuildFromTemplate.mockClear();
 
       await refreshTrayMenu();
 
@@ -230,7 +256,10 @@ describe('tray module', () => {
     };
 
     const getTemplateFromRefresh = async () => {
-      const { createOrUpdateTray, refreshTrayMenu } = await import('@/process/tray');
+      // Pre-import mocked modules to ensure doMock is resolved before tray imports them
+      await import('electron');
+      await import('@process/services/database');
+      const { createOrUpdateTray, refreshTrayMenu } = await import('@process/utils/tray');
       createOrUpdateTray();
       const previousCalls = mockBuildFromTemplate.mock.calls.length;
       await refreshTrayMenu();
@@ -285,6 +314,41 @@ describe('tray module', () => {
 
       // Should still build menu without crashing
       expect(mockBuildFromTemplate).toHaveBeenCalled();
+    });
+
+    it('should hide window and dock when hide-to-tray is clicked on macOS', async () => {
+      setupWithOverrides();
+      Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+      const { setTrayMainWindow } = await import('@process/utils/tray');
+      const mockWindow = createMockWindow();
+      setTrayMainWindow(mockWindow);
+
+      const templateArg = await getTemplateFromRefresh();
+      const hideToTrayItem = templateArg.find((item: any) => item.label === 'common.tray.closeToTray');
+
+      hideToTrayItem.click();
+
+      expect(mockWindow.hide).toHaveBeenCalledOnce();
+      expect(mockDock.hide).toHaveBeenCalledOnce();
+    });
+
+    it('should restore window and show dock when show-window is clicked on macOS', async () => {
+      setupWithOverrides();
+      Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
+      const { setTrayMainWindow } = await import('@process/utils/tray');
+      const mockWindow = createMockWindow();
+      mockWindow.isMinimized.mockReturnValue(true);
+      setTrayMainWindow(mockWindow);
+
+      const templateArg = await getTemplateFromRefresh();
+      const showWindowItem = templateArg.find((item: any) => item.label === 'common.tray.showWindow');
+
+      showWindowItem.click();
+
+      expect(mockDock.show).toHaveBeenCalledOnce();
+      expect(mockWindow.restore).toHaveBeenCalledOnce();
+      expect(mockWindow.show).toHaveBeenCalledOnce();
+      expect(mockWindow.focus).toHaveBeenCalledOnce();
     });
   });
 });

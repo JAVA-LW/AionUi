@@ -23,7 +23,7 @@ vi.mock('@/common', () => ({
   },
 }));
 
-vi.mock('@process/message', () => ({
+vi.mock('@process/utils/message', () => ({
   flushConversationMessages: vi.fn(async () => {
     flushed = true;
   }),
@@ -46,7 +46,7 @@ vi.mock('@process/services/cron/CronBusyGuard', () => ({
   },
 }));
 
-vi.mock('@process/database', () => ({
+vi.mock('@process/services/database', () => ({
   getDatabase: () => ({
     getConversation: vi.fn(() => ({
       success: true,

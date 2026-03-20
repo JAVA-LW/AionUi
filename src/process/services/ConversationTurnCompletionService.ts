@@ -5,12 +5,12 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IConversationTurnCompletedEvent } from '@/common/ipcBridge';
-import type { TChatConversation } from '@/common/storage';
-import { getDatabase } from '@process/database';
+import type { IConversationTurnCompletedEvent } from '@/common/adapter/ipcBridge';
+import type { TChatConversation } from '@/common/config/storage';
+import { getDatabase } from '@process/services/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { getConversationRuntimeTask } from '@process/services/ConversationRuntimeService';
-import { flushConversationMessages } from '@process/message';
+import { flushConversationMessages } from '@process/utils/message';
 
 export type ConversationStatusValue = 'pending' | 'running' | 'finished';
 export type ConversationRuntimeState =

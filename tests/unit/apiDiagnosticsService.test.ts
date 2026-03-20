@@ -42,14 +42,14 @@ vi.mock('@process/services/ConversationTurnCompletionService', () => ({
   getReadOnlyConversationStatusSnapshot,
 }));
 
-vi.mock('@process/message', () => ({
+vi.mock('@process/utils/message', () => ({
   getConversationMessageCacheStats: vi.fn(() => ({
     size: 0,
     conversations: [],
   })),
 }));
 
-vi.mock('@process/database', () => ({
+vi.mock('@process/services/database', () => ({
   getDatabase: vi.fn(() => ({
     getUserConversations: vi.fn(() => ({
       total: 0,

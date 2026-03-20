@@ -195,3 +195,4 @@ lint-results.txt
 
 # Superpowers brainstorm tool (runtime files, session data)
 .superpowers/
+resources/bundled-bun

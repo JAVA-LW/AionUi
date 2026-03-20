@@ -434,17 +434,16 @@ export function resolveNpxPath(env: Record<string, string | undefined>): string 
     })
       .trim()
       .split(/\r?\n/)[0]; // `where` on Windows may return multiple lines
-    const nodeDir = pathApi.dirname(nodePath);
-    const npxCandidate = pathApi.join(nodeDir, npxName);
+    const npxCandidate = path.join(path.dirname(nodePath), npxName);
 
     let versionOutput = '';
     if (isWindows) {
-      // On Windows, execFileSync() cannot execute .cmd shims directly.
-      // Validate the Node-adjacent npm installation by invoking the bundled
-      // npx entrypoint JS with the same node.exe instead of probing npx.cmd.
-      const npmBinDir = pathApi.join(nodeDir, 'node_modules', 'npm', 'bin');
-      const npmPrefixJs = pathApi.join(npmBinDir, 'npm-prefix.js');
-      const npxCliJs = pathApi.join(npmBinDir, 'npx-cli.js');
+      // Packaged Windows builds may resolve a bundled node.exe whose sibling
+      // npx.cmd exists, but its bundled npm JS files are missing. Probe the
+      // npm entrypoint JS directly so we only trust a complete Node+npm install.
+      const npmBinDir = path.join(path.dirname(nodePath), 'node_modules', 'npm', 'bin');
+      const npmPrefixJs = path.join(npmBinDir, 'npm-prefix.js');
+      const npxCliJs = path.join(npmBinDir, 'npx-cli.js');
       if (!existsSync(npxCandidate) || !existsSync(npmPrefixJs) || !existsSync(npxCliJs)) {
         throw new Error('Node-adjacent npx.cmd or bundled npm scripts are missing');
       }

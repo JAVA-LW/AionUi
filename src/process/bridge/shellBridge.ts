@@ -5,8 +5,8 @@
  */
 
 import { shell } from 'electron';
-import { ipcBridge } from '../../common';
-import { openWorkspaceInEditor } from '../utils/workspaceEditor';
+import { ipcBridge } from '@/common';
+import { openWorkspaceInEditor } from '@process/utils/workspaceEditor';
 
 export function initShellBridge(): void {
   ipcBridge.shell.openWorkspaceInEditor.provider(async ({ workspace, target }) => {

@@ -8,9 +8,9 @@ import {
   CODEX_MODE_FULL_AUTO_NO_SANDBOX,
   isCodexAutoApproveMode,
   isCodexNoSandboxMode,
-} from '../../src/common/codex/codexModes';
+} from '../../src/common/types/codex/codexModes';
 import { getCodexConfigPath, getCodexSandboxModeForSessionMode } from '../../src/process/utils/codexConfig';
-import { getAgentModes } from '../../src/renderer/constants/agentModes';
+import { getAgentModes } from '../../src/renderer/utils/model/agentModes';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { homedir } from 'os';
 import { join } from 'path';

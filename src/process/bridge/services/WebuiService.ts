@@ -5,26 +5,39 @@
  */
 
 import { networkInterfaces } from 'os';
-import type { IWebUIStatus } from '@/common/ipcBridge';
-import { clearInitialAdminPassword, getInitialAdminPassword } from '@/webserver';
-import { AuthService } from '@/webserver/auth/service/AuthService';
-import { UserRepository } from '@/webserver/auth/repository/UserRepository';
-import { AUTH_CONFIG, SERVER_CONFIG } from '@/webserver/config/constants';
+import type { IWebUIStatus } from '@/common/adapter/ipcBridge';
+import { AuthService } from '@process/webserver/auth/service/AuthService';
+import { UserRepository } from '@process/webserver/auth/repository/UserRepository';
+import { AUTH_CONFIG, SERVER_CONFIG } from '@process/webserver/config/constants';
 
 /**
  * WebUI 服务层 - 封装所有 WebUI 相关的业务逻辑
  * WebUI Service Layer - Encapsulates all WebUI-related business logic
  */
 export class WebuiService {
+  private static webServerFunctionsLoaded = false;
+  private static _getInitialAdminPassword: (() => string | null) | null = null;
+  private static _clearInitialAdminPassword: (() => void) | null = null;
+
   /**
    * 加载 webserver 函数（避免循环依赖）
+   * Load webserver functions (avoid circular dependency)
    */
+  private static async loadWebServerFunctions(): Promise<void> {
+    if (this.webServerFunctionsLoaded) return;
+
+    const webServer = await import('@process/webserver/index');
+    this._getInitialAdminPassword = webServer.getInitialAdminPassword;
+    this._clearInitialAdminPassword = webServer.clearInitialAdminPassword;
+    this.webServerFunctionsLoaded = true;
+  }
+
   /**
    * 获取初始管理员密码
    * Get initial admin password
    */
   private static getInitialAdminPassword(): string | null {
-    return getInitialAdminPassword();
+    return this._getInitialAdminPassword?.() ?? null;
   }
 
   /**
@@ -32,7 +45,7 @@ export class WebuiService {
    * Clear initial admin password
    */
   private static clearInitialAdminPassword(): void {
-    clearInitialAdminPassword();
+    this._clearInitialAdminPassword?.();
   }
 
   /**
@@ -81,6 +94,7 @@ export class WebuiService {
    * Get admin user (with auto-loading)
    */
   static async getAdminUser() {
+    await this.loadWebServerFunctions();
     const adminUser = UserRepository.getSystemUser();
     if (!adminUser) {
       throw new Error('WebUI user not found');
@@ -100,6 +114,8 @@ export class WebuiService {
       allowRemote: boolean;
     } | null
   ): Promise<IWebUIStatus> {
+    await this.loadWebServerFunctions();
+
     const adminUser = UserRepository.getSystemUser();
     const running = webServerInstance !== null;
     const port = webServerInstance?.port ?? SERVER_CONFIG.DEFAULT_PORT;

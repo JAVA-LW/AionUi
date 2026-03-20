@@ -12,7 +12,7 @@ const getConversationMessages = vi.fn();
 const insertMessage = vi.fn();
 const updateMessage = vi.fn();
 
-vi.mock('../../src/process/database/export', () => ({
+vi.mock('@process/services/database/export', () => ({
   getDatabase: vi.fn(() => ({
     getConversation,
     createConversation,
@@ -22,7 +22,7 @@ vi.mock('../../src/process/database/export', () => ({
   })),
 }));
 
-vi.mock('../../src/process/initStorage', () => ({
+vi.mock('@process/utils/initStorage', () => ({
   ProcessChat: {
     get: vi.fn(async () => []),
   },
@@ -99,7 +99,7 @@ describe('message cache', () => {
 
   it('flushes accumulated stream updates during continuous output', async () => {
     const { addOrUpdateMessage, getConversationMessageCacheStats, releaseConversationMessageCache } =
-      await import('../../src/process/message');
+      await import('@process/utils/message');
 
     for (let index = 0; index < 12; index += 1) {
       addOrUpdateMessage('conv-1', {
@@ -134,7 +134,7 @@ describe('message cache', () => {
 
   it('persists pending updates before releasing the cache', async () => {
     const { addOrUpdateMessage, getConversationMessageCacheStats, releaseConversationMessageCache } =
-      await import('../../src/process/message');
+      await import('@process/utils/message');
 
     addOrUpdateMessage('conv-1', {
       id: 'msg-1',

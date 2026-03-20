@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AcpBackend, AcpSessionConfigOption } from '@/types/acpTypes';
+import type { AcpBackend, AcpSessionConfigOption } from '@/common/types/acpTypes';
 import { Button, Dropdown, Menu } from '@arco-design/web-react';
 import { Down } from '@icon-park/react';
 import React from 'react';

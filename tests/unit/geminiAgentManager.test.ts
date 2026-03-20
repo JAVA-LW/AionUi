@@ -12,7 +12,7 @@ const notifyPotentialCompletion = vi.fn();
 const hasCronCommands = vi.fn(() => false);
 const extractTextFromMessage = vi.fn(() => 'done');
 
-vi.mock('@/channels/agent/ChannelEventBus', () => ({
+vi.mock('@process/channels/agent/ChannelEventBus', () => ({
   channelEventBus: {
     emitAgentMessage: vi.fn(),
   },
@@ -35,7 +35,7 @@ vi.mock('@/common', () => ({
   },
 }));
 
-vi.mock('@/common/chatLib', () => ({
+vi.mock('@/common/chat/chatLib', () => ({
   transformMessage: vi.fn(() => null),
 }));
 
@@ -58,7 +58,7 @@ vi.mock('@office-ai/aioncli-core', () => ({
   },
 }));
 
-vi.mock('@/extensions', () => ({
+vi.mock('@process/extensions', () => ({
   ExtensionRegistry: {
     getInstance: vi.fn(() => ({
       getMcpServers: vi.fn(() => []),
@@ -66,7 +66,7 @@ vi.mock('@/extensions', () => ({
   },
 }));
 
-vi.mock('@/process/initStorage', () => ({
+vi.mock('@process/utils/initStorage', () => ({
   ProcessConfig: {
     get: vi.fn(),
     set: vi.fn(),
@@ -90,14 +90,14 @@ vi.mock('../../src/process/task/AcpSkillManager', () => ({
   },
 }));
 
-vi.mock('@process/database', () => ({
+vi.mock('@process/services/database', () => ({
   getDatabase: vi.fn(() => ({
     getConversationMessages,
     updateConversation: vi.fn(),
   })),
 }));
 
-vi.mock('../../src/process/message', () => ({
+vi.mock('@process/utils/message', () => ({
   addMessage: vi.fn(),
   addOrUpdateMessage: vi.fn(),
   flushConversationMessages,
@@ -118,7 +118,7 @@ vi.mock('@process/services/ConversationTurnCompletionService', () => ({
   },
 }));
 
-vi.mock('../../src/process/utils/previewUtils', () => ({
+vi.mock('@process/utils/previewUtils', () => ({
   handlePreviewOpenEvent: vi.fn(() => false),
 }));
 
@@ -158,7 +158,7 @@ vi.mock('../../src/process/task/BaseAgentManager', () => ({
   },
 }));
 
-vi.mock('../../src/process/utils/mainLogger', () => ({
+vi.mock('@process/utils/mainLogger', () => ({
   mainLog: vi.fn(),
   mainWarn: vi.fn(),
   mainError: vi.fn(),
@@ -177,11 +177,11 @@ vi.mock('../../src/process/task/ThinkTagDetector', () => ({
   stripThinkTags: vi.fn((content: string) => content),
 }));
 
-vi.mock('../../src/agent/gemini/GeminiApprovalStore', () => ({
+vi.mock('@process/agent/gemini/GeminiApprovalStore', () => ({
   GeminiApprovalStore: class MockGeminiApprovalStore {},
 }));
 
-vi.mock('../../src/agent/gemini/cli/tools/tools', () => ({
+vi.mock('@process/agent/gemini/cli/tools/tools', () => ({
   ToolConfirmationOutcome: {
     ProceedOnce: 'proceed_once',
     ProceedAlways: 'proceed_always',

@@ -159,7 +159,7 @@ const cleanupWorkerOnlyRuntimeArtifacts = async (sessionId: string): Promise<voi
   await forgetConversationTurnCompletionSession(sessionId);
 
   try {
-    const { releaseConversationMessageCache } = await import('@process/message');
+    const { releaseConversationMessageCache } = await import('@process/utils/message');
     await releaseConversationMessageCache(sessionId, {
       persistPending: true,
     });

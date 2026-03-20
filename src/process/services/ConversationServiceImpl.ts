@@ -5,17 +5,17 @@
  */
 
 import type { IConversationService, CreateConversationParams, MigrateConversationParams } from './IConversationService';
-import type { IConversationRepository } from '@process/database/IConversationRepository';
-import type { TChatConversation } from '@/common/storage';
+import type { IConversationRepository } from '@process/services/database/IConversationRepository';
+import type { TChatConversation } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
-import { cronService } from './cron/CronService';
+import { cronService } from './cron/cronServiceSingleton';
 import {
   createGeminiAgent,
   createAcpAgent,
   createCodexAgent,
   createOpenClawAgent,
   createNanobotAgent,
-} from '@process/initAgent';
+} from '@process/utils/initAgent';
 
 /**
  * Concrete implementation of IConversationService.
@@ -26,6 +26,10 @@ export class ConversationServiceImpl implements IConversationService {
 
   async getConversation(id: string): Promise<TChatConversation | undefined> {
     return this.repo.getConversation(id);
+  }
+
+  async listAllConversations(): Promise<TChatConversation[]> {
+    return this.repo.listAllConversations();
   }
 
   async deleteConversation(id: string): Promise<void> {

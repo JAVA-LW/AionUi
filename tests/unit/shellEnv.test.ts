@@ -157,7 +157,7 @@ describe('getEnhancedEnv', () => {
     expect(typeof result.PATH).toBe('string');
     // Spot-check: no undefined string values were injected
     for (const [k, v] of Object.entries(result)) {
-      (expect(typeof v).toBe('string'), `key ${k} has non-string value`);
+      expect(typeof v).toBe('string');
     }
   });
 });
@@ -404,46 +404,65 @@ describe('resolveNpxPath', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform });
   });
 
-  it('prefers the Node-adjacent npx.cmd on Windows instead of falling back to PATH lookup', async () => {
+  it('verifies Windows npx via the bundled npm entrypoint JS', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
 
-    vi.doMock('child_process', () => ({
-      execFileSync: vi.fn((file: string, args: string[]) => {
-        if (file === 'where' && args[0] === 'node') {
-          return 'E:\\evn\\nodeOthe\\node.exe\r\nE:\\broken\\node.exe\r\n';
-        }
-        if (
-          file === 'E:\\evn\\nodeOthe\\node.exe' &&
-          Array.isArray(args) &&
-          args[0] === 'E:\\evn\\nodeOthe\\node_modules\\npm\\bin\\npx-cli.js' &&
-          args[1] === '--version'
-        ) {
-          return '10.9.0';
-        }
-        throw new Error(`unexpected exec: ${file} ${args.join(' ')}`);
-      }),
-      execFile: vi.fn(),
-    }));
+    const execFileSync = vi
+      .fn()
+      .mockReturnValueOnce(`${path.join('/tooling', 'node.exe')}\n`)
+      .mockReturnValueOnce('10.9.0\n');
 
     vi.doMock('fs', async () => {
       const actual = await vi.importActual<typeof import('fs')>('fs');
       return {
         ...actual,
-        existsSync: vi.fn((targetPath: string) =>
-          [
-            'E:\\evn\\nodeOthe\\npx.cmd',
-            'E:\\evn\\nodeOthe\\node_modules\\npm\\bin\\npm-prefix.js',
-            'E:\\evn\\nodeOthe\\node_modules\\npm\\bin\\npx-cli.js',
-          ].includes(targetPath)
-        ),
+        existsSync: vi.fn(() => true),
       };
     });
 
+    vi.doMock('child_process', () => ({
+      execFileSync,
+      execFile: vi.fn(),
+    }));
+
+    const { resolveNpxPath } = await import('@process/utils/shellEnv');
+    const result = resolveNpxPath({ PATH: '/tooling' });
+    const npxCandidate = path.join('/tooling', 'npx.cmd');
+    const npxCliJs = path.join('/tooling', 'node_modules', 'npm', 'bin', 'npx-cli.js');
+
+    expect(result).toBe(npxCandidate);
+    expect(execFileSync).toHaveBeenNthCalledWith(
+      2,
+      path.join('/tooling', 'node.exe'),
+      [npxCliJs, '--version'],
+      expect.objectContaining({
+        env: { PATH: '/tooling' },
+        windowsHide: true,
+      })
+    );
+  });
+
+  it('falls back to PATH lookup when bundled npm scripts are missing on Windows', async () => {
+    Object.defineProperty(process, 'platform', { value: 'win32' });
+
+    const execFileSync = vi.fn().mockReturnValueOnce(`${path.join('/tooling', 'node.exe')}\n`);
+
+    vi.doMock('fs', async () => {
+      const actual = await vi.importActual<typeof import('fs')>('fs');
+      return {
+        ...actual,
+        existsSync: vi.fn((target: string) => target === path.join('/tooling', 'npx.cmd')),
+      };
+    });
+
+    vi.doMock('child_process', () => ({
+      execFileSync,
+      execFile: vi.fn(),
+    }));
+
     const { resolveNpxPath } = await import('@process/utils/shellEnv');
 
-    expect(resolveNpxPath({ PATH: 'E:\\broken-project\\node_modules\\.bin;E:\\evn\\nodeOthe' })).toBe(
-      'E:\\evn\\nodeOthe\\npx.cmd'
-    );
+    expect(resolveNpxPath({ PATH: '/tooling' })).toBe('npx.cmd');
   });
 });
 

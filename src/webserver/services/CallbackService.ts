@@ -5,7 +5,7 @@
  */
 
 import { DEFAULT_JS_FILTER_SCRIPT } from '@/common/apiCallback';
-import type { IApiConfig } from '@/common/storage';
+import type { IApiConfig } from '@/common/config/storage';
 import { Script, createContext } from 'vm';
 
 type CallbackTemplateVariables = Record<string, unknown> & {

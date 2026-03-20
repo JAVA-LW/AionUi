@@ -10,41 +10,44 @@ Sentry.init({
   dsn: process.env.SENTRY_DSN,
 });
 
-import './utils/configureConsoleLog';
+import './process/utils/configureConsoleLog';
 // configureChromium sets app name (dev isolation) and Chromium flags — must run before other modules
-import { cdpPort, verifyCdpReady } from './utils/configureChromium';
+import './process/utils/configureChromium';
 import { app, BrowserWindow, nativeImage, net, powerMonitor, protocol, screen } from 'electron';
 import fixPath from 'fix-path';
 import * as fs from 'fs';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
-import { initMainAdapterWithWindow } from './adapter/main';
+import { initMainAdapterWithWindow } from './common/adapter/main';
 import { ipcBridge } from './common';
-import { AION_ASSET_PROTOCOL } from '@/extensions';
+import { AION_ASSET_PROTOCOL } from '@process/extensions';
 import { initializeProcess } from './process';
-import { ProcessConfig } from './process/initStorage';
+import { ProcessConfig } from './process/utils/initStorage';
 import { loadShellEnvironmentAsync, logEnvironmentDiagnostics, mergePaths } from './process/utils/shellEnv';
-import { initializeAcpDetector } from './process/bridge';
-import { registerWindowMaximizeListeners } from './process/bridge/windowControlsBridge';
+import { initializeAcpDetector, registerWindowMaximizeListeners } from '@process/bridge';
 import { onCloseToTrayChanged, onLanguageChanged } from './process/bridge/systemSettingsBridge';
-import { setInitialLanguage } from '@process/i18n';
+import { setInitialLanguage } from '@process/services/i18n';
 import { workerTaskManager } from './process/task/workerTaskManagerSingleton';
-import { setupApplicationMenu } from './utils/appMenu';
-import { startWebServer } from './webserver';
+import { setupApplicationMenu } from './process/utils/appMenu';
+import { startWebServer } from './process/webserver';
 import { applyZoomToWindow } from './process/utils/zoom';
-import { clearPendingDeepLinkUrl, getPendingDeepLinkUrl, handleDeepLinkUrl, PROTOCOL_SCHEME } from './process/deepLink';
+import {
+  clearPendingDeepLinkUrl,
+  getPendingDeepLinkUrl,
+  handleDeepLinkUrl,
+  PROTOCOL_SCHEME,
+} from './process/utils/deepLink';
 import {
   bindMainWindowReferences,
   showAndFocusMainWindow,
   showOrCreateMainWindow,
-} from './process/mainWindowLifecycle';
+} from './process/utils/mainWindowLifecycle';
 import {
   loadUserWebUIConfig,
-  parseBooleanEnv,
   resolveRemoteAccess,
   resolveWebUIPort,
   restoreDesktopWebUIFromPreferences,
-} from './process/webuiConfig';
+} from './process/utils/webuiConfig';
 import {
   createOrUpdateTray,
   destroyTray,
@@ -53,7 +56,7 @@ import {
   refreshTrayMenu,
   setCloseToTrayEnabled,
   setIsQuitting,
-} from './process/tray';
+} from './process/utils/tray';
 // @ts-expect-error - electron-squirrel-startup doesn't have types
 import electronSquirrelStartup from 'electron-squirrel-startup';
 
@@ -174,9 +177,9 @@ const getSwitchValue = (flag: string): string | undefined => {
 };
 const hasCommand = (cmd: string) => process.argv.includes(cmd);
 
-const isWebUIMode = hasSwitch('webui') || parseBooleanEnv(process.env.AIONUI_WEBUI) === true;
-const isRemoteMode = hasSwitch('remote') || parseBooleanEnv(process.env.AIONUI_REMOTE_MODE) === true;
-const isResetPasswordMode = hasCommand('--resetpass') || parseBooleanEnv(process.env.AIONUI_RESETPASS) === true;
+const isWebUIMode = hasSwitch('webui');
+const isRemoteMode = hasSwitch('remote');
+const isResetPasswordMode = hasCommand('--resetpass');
 const isVersionMode = hasCommand('--version') || hasCommand('-v');
 
 // Flag to distinguish intentional quit from unexpected exit in WebUI mode
@@ -409,7 +412,7 @@ const handleAppReady = async (): Promise<void> => {
       const username = argsAfterCommand.find((arg) => !arg.startsWith('--')) || 'admin';
 
       // Import resetpass logic
-      const { resetPasswordCLI } = await import('./utils/resetPasswordCLI');
+      const { resetPasswordCLI } = await import('./process/utils/resetPasswordCLI');
       await resetPasswordCLI(username);
 
       app.quit();
@@ -524,6 +527,7 @@ const handleAppReady = async (): Promise<void> => {
   }
 
   // Verify CDP is ready and log status
+  const { cdpPort, verifyCdpReady } = await import('./process/utils/configureChromium');
   if (cdpPort) {
     const cdpReady = await verifyCdpReady(cdpPort);
     if (cdpReady) {
@@ -539,7 +543,7 @@ const handleAppReady = async (): Promise<void> => {
   // Listen for system resume (wake from sleep/hibernate) to recover missed cron jobs
   powerMonitor.on('resume', () => {
     console.log('[App] System resumed from sleep, triggering cron recovery');
-    import('@process/services/cron/CronService')
+    import('@process/services/cron/cronServiceSingleton')
       .then(({ cronService }) => {
         void cronService.handleSystemResume();
       })
@@ -618,7 +622,7 @@ app.on('before-quit', async () => {
 
   // Shutdown Channel subsystem
   try {
-    const { getChannelManager } = await import('@/channels');
+    const { getChannelManager } = await import('@process/channels');
     await getChannelManager().shutdown();
   } catch (error) {
     console.error('[App] Failed to shutdown ChannelManager:', error);

@@ -4,17 +4,17 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { TChatConversation } from '@/common/storage';
+import type { TChatConversation } from '@/common/config/storage';
 import AcpAgentManager from './task/AcpAgentManager';
-import { CodexAgentManager } from '@/agent/codex';
+import CodexAgentManager from './task/CodexAgentManager';
 import NanoBotAgentManager from './task/NanoBotAgentManager';
 import OpenClawAgentManager from './task/OpenClawAgentManager';
 // import type { AcpAgentTask } from './task/AcpAgentTask';
-import { ProcessChat } from './initStorage';
+import { ProcessChat } from '@process/utils/initStorage';
 import type AgentBaseTask from './task/BaseAgentManager';
 import { GeminiAgentManager } from './task/GeminiAgentManager';
-import { getDatabase } from './database/export';
-import { releaseConversationMessageCache } from './message';
+import { getDatabase } from '@process/services/database';
+import { releaseConversationMessageCache } from '@process/utils/message';
 import { cronBusyGuard } from './services/cron/CronBusyGuard';
 import { ConversationTurnCompletionService } from './services/ConversationTurnCompletionService';
 import { workerTaskManager } from './task/workerTaskManagerSingleton';

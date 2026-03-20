@@ -5,8 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IConversationTurnCompletedEvent } from '@/common/ipcBridge';
-import { getDatabase } from '@process/database';
+import type { IConversationTurnCompletedEvent } from '@/common/adapter/ipcBridge';
+import { getDatabase } from '@process/services/database';
 import { CallbackService } from '@/webserver/services/CallbackService';
 
 /**

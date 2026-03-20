@@ -138,7 +138,7 @@ describe('fsBridge skills functionality', () => {
     });
 
     // Mock initStorage
-    vi.doMock('@/process/initStorage', () => ({
+    vi.doMock('@process/utils/initStorage', () => ({
       getSystemDir: vi.fn(() => ({
         cacheDir: '/mock/cache',
         workDir: '/mock/work',
@@ -222,7 +222,7 @@ describe('fsBridge skills functionality', () => {
 
   // Helper macro to fetch the actual implemented provider endpoint
   const getProvider = async (channel: string) => {
-    const mod = await import('@/process/bridge/fsBridge');
+    const mod = await import('@process/bridge/fsBridge');
     mod.initFsBridge();
     const ipcMod = await import('@/common');
     // Type assertion hack, accessing the internal registered function logic
