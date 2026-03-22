@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * Copyright 2025 AionUi (aionui.com)
  * SPDX-License-Identifier: Apache-2.0
@@ -109,6 +109,8 @@ export interface ICdpStatus {
     cwd: string;
     startTime: number;
   }>;
+  /** Whether CDP is enabled in the persisted config file (may differ from runtime) */
+  configEnabled: boolean;
   /** Whether the app is running in development mode */
   isDevMode: boolean;
 }
@@ -559,7 +561,9 @@ export const database = {
     import('@/common/config/storage').TChatConversation[],
     { page?: number; pageSize?: number }
   >('database.get-user-conversations'),
-  getApiConfig: bridge.buildProvider<import('@/common/config/storage').IApiConfig | null, void>('database.get-api-config'),
+  getApiConfig: bridge.buildProvider<import('@/common/config/storage').IApiConfig | null, void>(
+    'database.get-api-config'
+  ),
   updateApiEnabled: bridge.buildProvider<{ success: boolean; error?: string }, { enabled: boolean }>(
     'database.update-api-enabled'
   ),

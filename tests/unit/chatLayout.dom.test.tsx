@@ -149,7 +149,7 @@ describe('ChatLayout', () => {
     chatLayoutMocks.invoke.mockReset();
   });
 
-  it('hides the inline conversation search entry when tabs are open', () => {
+  it('shows the standalone conversation search entry when tabs are open', () => {
     chatLayoutMocks.openTabs = [{ id: 'conv-1', name: 'Test Conversation', workspace: 'E:/workspace', type: 'gemini' }];
 
     render(
@@ -164,6 +164,6 @@ describe('ChatLayout', () => {
       </ChatLayout>
     );
 
-    expect(screen.queryByLabelText('Search conversation')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Search conversation')).toBeInTheDocument();
   });
 });
