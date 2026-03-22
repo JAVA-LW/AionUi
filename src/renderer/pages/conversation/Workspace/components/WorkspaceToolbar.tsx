@@ -23,6 +23,7 @@ type WorkspaceToolbarProps = {
   searchText: string;
   setSearchText: (v: string) => void;
   onSearch: (v: string) => void;
+  toggleSearch: () => void;
   searchInputRef: React.RefObject<RefInputType | null>;
   // Tree state
   loading: boolean;
@@ -74,6 +75,7 @@ const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
   searchText,
   setSearchText,
   onSearch,
+  toggleSearch,
   searchInputRef,
   loading,
   refreshWorkspace,
@@ -177,6 +179,17 @@ const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
               </span>
             </Dropdown>
           )}
+          <Tooltip content={t('conversation.workspace.searchPlaceholder')}>
+            <span>
+              <Search
+                className='workspace-toolbar-icon-btn lh-[1] flex cursor-pointer'
+                theme='outline'
+                size='16'
+                fill={showSearch || searchText ? iconColors.primary : iconColors.secondary}
+                onClick={toggleSearch}
+              />
+            </span>
+          </Tooltip>
           {isTemporaryWorkspace && (
             <Tooltip content={t('conversation.workspace.changeWorkspace')}>
               <span>

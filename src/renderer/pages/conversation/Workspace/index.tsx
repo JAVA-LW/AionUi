@@ -284,6 +284,7 @@ const ChatWorkspace: React.FC<WorkspaceProps> = ({
           searchText={searchHook.searchText}
           setSearchText={searchHook.setSearchText}
           onSearch={searchHook.onSearch}
+          toggleSearch={searchHook.toggleSearch}
           searchInputRef={searchHook.searchInputRef}
           loading={treeHook.loading}
           refreshWorkspace={treeHook.refreshWorkspace}

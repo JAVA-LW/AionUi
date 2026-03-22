@@ -13,12 +13,59 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { BUILTIN_IMAGE_GEN_ID, BUILTIN_IMAGE_GEN_NAME } from './constants';
-import { executeImageGeneration } from '@/common/chat/imageGenCore';
-import type { TProviderWithModel } from '@/common/config/storage';
+import { format } from 'node:util';
+
+// Keep these literals local so the MCP bootstrap path does not import the app's
+// storage layer, which writes debug output to stdout and breaks stdio handshakes.
+const BUILTIN_IMAGE_GEN_ID = 'builtin-image-gen';
+const BUILTIN_IMAGE_GEN_NAME = 'aionui-image-generation';
+
+type ImageGenerationProvider = {
+  id: string;
+  name: string;
+  platform: string;
+  baseUrl: string;
+  apiKey: string;
+  useModel: string;
+};
+
+function redirectConsoleToStderr(): void {
+  const writeToStderr = (...args: unknown[]) => {
+    process.stderr.write(`${format(...args)}\n`);
+  };
+
+  console.log = writeToStderr as typeof console.log;
+  console.info = writeToStderr as typeof console.info;
+  console.warn = writeToStderr as typeof console.warn;
+  console.debug = writeToStderr as typeof console.debug;
+}
+
+function divertStdoutToStderrDuringBootstrap(): () => void {
+  const originalWrite = process.stdout.write.bind(process.stdout) as typeof process.stdout.write;
+
+  process.stdout.write = ((
+    chunk: string | Uint8Array,
+    encoding?: BufferEncoding | ((error?: Error | null) => void),
+    cb?: (error?: Error | null) => void
+  ) => {
+    if (typeof encoding === 'function') {
+      return process.stderr.write(chunk, encoding);
+    }
+
+    if (cb) {
+      return process.stderr.write(chunk, encoding, cb);
+    }
+
+    return process.stderr.write(chunk, encoding);
+  }) as typeof process.stdout.write;
+
+  return () => {
+    process.stdout.write = originalWrite;
+  };
+}
 
 // Read provider config from environment variables
-function getProviderFromEnv(): TProviderWithModel | null {
+function getProviderFromEnv(): ImageGenerationProvider | null {
   const platform = process.env.AIONUI_IMG_PLATFORM;
   const baseUrl = process.env.AIONUI_IMG_BASE_URL;
   const apiKey = process.env.AIONUI_IMG_API_KEY;
@@ -39,6 +86,10 @@ function getProviderFromEnv(): TProviderWithModel | null {
 }
 
 async function main() {
+  redirectConsoleToStderr();
+  const restoreStdout = divertStdoutToStderrDuringBootstrap();
+  const { executeImageGeneration } = await import('@/common/chat/imageGenCore');
+
   const server = new McpServer({
     name: BUILTIN_IMAGE_GEN_NAME,
     version: '1.0.0',
@@ -127,6 +178,7 @@ IMPORTANT: When user provides multiple images, ALWAYS pass ALL images to the ima
   );
 
   const transport = new StdioServerTransport();
+  restoreStdout();
   await server.connect(transport);
 }
 

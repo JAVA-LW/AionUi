@@ -20,7 +20,7 @@ type UseWorkspaceSearchParams = {
  */
 export function useWorkspaceSearch({ workspace, loadWorkspace }: UseWorkspaceSearchParams) {
   const [searchText, setSearchText] = useState('');
-  const [showSearch, setShowSearch] = useState(true);
+  const [showSearch, setShowSearch] = useState(false);
   const searchInputRef = useRef<RefInputType | null>(null);
 
   // Host file selector state (WebUI: use DirectorySelectionModal instead of native dialog)
@@ -60,6 +60,15 @@ export function useWorkspaceSearch({ workspace, loadWorkspace }: UseWorkspaceSea
     [workspace, loadWorkspace]
   );
 
+  const toggleSearch = useCallback(() => {
+    setShowSearch((current) => {
+      if (current && !searchText.trim()) {
+        return false;
+      }
+      return true;
+    });
+  }, [searchText]);
+
   // Handle host file selection callback (WebUI)
   const handleHostFileSelected = useCallback(
     (
@@ -79,6 +88,7 @@ export function useWorkspaceSearch({ workspace, loadWorkspace }: UseWorkspaceSea
     setSearchText,
     showSearch,
     setShowSearch,
+    toggleSearch,
     searchInputRef,
     onSearch,
     showHostFileSelector,

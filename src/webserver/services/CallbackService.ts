@@ -47,11 +47,27 @@ export class CallbackService {
 
     for (const [key, value] of Object.entries(variables)) {
       const placeholder = `{{${key}}}`;
-      const replacement = typeof value === 'string' ? value : JSON.stringify(value);
-      result = result.replaceAll(placeholder, replacement);
+      if (typeof value === 'string') {
+        result = this.replaceStringVariable(result, placeholder, value);
+        continue;
+      }
+
+      const replacement = JSON.stringify(value ?? null);
+      result = this.replaceLiteral(result, placeholder, replacement);
     }
 
     return result;
+  }
+
+  private static replaceStringVariable(template: string, placeholder: string, value: string): string {
+    const escapedValue = JSON.stringify(value);
+    const quotedPlaceholder = `"${placeholder}"`;
+    const withQuotedReplacement = this.replaceLiteral(template, quotedPlaceholder, escapedValue);
+    return this.replaceLiteral(withQuotedReplacement, placeholder, escapedValue);
+  }
+
+  private static replaceLiteral(template: string, searchValue: string, replacement: string): string {
+    return template.split(searchValue).join(replacement);
   }
 
   static createTemplateVariables(config: IApiConfig, variables: CallbackTemplateVariables): Record<string, unknown> {

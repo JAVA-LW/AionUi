@@ -5,6 +5,7 @@ import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { useResizableSplit } from '@/renderer/hooks/ui/useResizableSplit';
 import ConversationTabs from '@/renderer/pages/conversation/components/ConversationTabs';
 import ChatTitleEditor from '@/renderer/pages/conversation/components/ChatTitleEditor';
+import ConversationTitleMinimap from '@/renderer/pages/conversation/components/ConversationTitleMinimap';
 import MobileWorkspaceOverlay from './MobileWorkspaceOverlay';
 import WorkspacePanelHeader, { DesktopWorkspaceToggle } from './WorkspacePanelHeader';
 import { useConversationTabs } from '@/renderer/pages/conversation/hooks/ConversationTabsContext';
@@ -71,6 +72,7 @@ const ChatLayout: React.FC<{
   // --- Hook C: title rename ---
   const { openTabs, updateTabName } = useConversationTabs();
   const hasTabs = openTabs.length > 0;
+  const showStandaloneMinimap = !layout?.isMobile && hasTabs && !!conversationId;
 
   const { editingTitle, setEditingTitle, titleDraft, setTitleDraft, renameLoading, canRenameTitle, submitTitleRename } =
     useTitleRename({
@@ -199,6 +201,11 @@ const ChatLayout: React.FC<{
           )}
         </FlexFullContainer>
         <div className='flex items-center gap-12px shrink-0'>
+          {showStandaloneMinimap && (
+            <div className='flex items-center justify-center shrink-0'>
+              <ConversationTitleMinimap conversationId={conversationId} />
+            </div>
+          )}
           {props.headerExtra}
           {(backend || agentLogo) && (
             <AgentModeSelector
