@@ -2,8 +2,8 @@
   "platform": "win32",
   "arch": "x64",
   "version": "latest",
-  "generatedAt": "2026-03-19T00:46:28.491Z",
-  "sourceType": "download",
+  "generatedAt": "2026-03-22T10:47:12.641Z",
+  "sourceType": "cache",
   "cacheDir": "C:\\Users\\Lw\\AppData\\Local\\AionUi\\cache\\bundled-bun\\latest\\win32-x64",
   "cacheMeta": {
     "platform": "win32",
@@ -17,8 +17,11 @@
     "updatedAt": "2026-03-19T00:46:28.436Z"
   },
   "source": {
-    "url": "https://github.com/oven-sh/bun/releases/latest/download/bun-windows-x64.zip",
-    "asset": "bun-windows-x64.zip"
+    "dir": "C:\\Users\\Lw\\AppData\\Local\\AionUi\\cache\\bundled-bun\\latest\\win32-x64",
+    "origin": {
+      "url": "https://github.com/oven-sh/bun/releases/latest/download/bun-windows-x64.zip",
+      "asset": "bun-windows-x64.zip"
+    }
   },
   "files": [
     "bun.exe"

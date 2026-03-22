@@ -192,7 +192,7 @@ lint-results.txt
 .worktrees/
 .aionui\diagnostics\api
 .aionui/diagnostics/api/
-
+.agent/
 # Superpowers brainstorm tool (runtime files, session data)
 .superpowers/
 resources/bundled-bun
