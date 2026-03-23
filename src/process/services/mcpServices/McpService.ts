@@ -297,7 +297,7 @@ export class McpService {
             };
           }
 
-          const result = await agentInstance.installMcpServers(enabledServers);
+          const result = await agentInstance.installMcpServers(enabledServers, agent.cliPath);
           return {
             agent: agent.name,
             success: result.success,
@@ -350,7 +350,7 @@ export class McpService {
             };
           }
 
-          const result = await agentInstance.removeMcpServer(mcpServerName);
+          const result = await agentInstance.removeMcpServer(mcpServerName, agent.cliPath);
           return {
             agent: `${agent.backend}:${agent.name}`,
             success: result.success,

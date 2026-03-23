@@ -6,6 +6,11 @@
 
 import type { IMcpServer } from '@/common/config/storage';
 import type { AcpResponse } from '@/common/types/acpTypes';
+import {
+  BUILTIN_IMAGE_GEN_ID,
+  isBuiltinImageGenName,
+  isBuiltinImageGenTransport,
+} from '@process/resources/builtinMcp/constants';
 
 export interface AcpSessionMcpNameValue {
   name: string;
@@ -69,6 +74,14 @@ export function parseAcpMcpCapabilities(response: AcpResponse | null): AcpMcpCap
 function shouldInjectBuiltinServer(server: IMcpServer): boolean {
   if (server.builtin !== true || !server.enabled) {
     return false;
+  }
+
+  if (
+    server.id === BUILTIN_IMAGE_GEN_ID ||
+    isBuiltinImageGenName(server.name) ||
+    isBuiltinImageGenTransport(server.transport)
+  ) {
+    return true;
   }
 
   return server.status === undefined || server.status === 'connected';

@@ -14,23 +14,26 @@ import {
   isBuiltinImageGenTransport,
 } from '@process/resources/builtinMcp/constants';
 import { getEnhancedEnv } from '@process/utils/shellEnv';
-import { safeExec, safeExecFile } from '@process/utils/safeExec';
+import { safeExec } from '@process/utils/safeExec';
 
 /** Env options for exec calls — ensures CLI is found from Finder/launchd launches */
 const getExecEnv = () => ({
   env: { ...getEnhancedEnv(), NODE_OPTIONS: '', TERM: 'dumb', NO_COLOR: '1' } as NodeJS.ProcessEnv,
 });
 
-export function buildClaudeStdioJsonConfig(server: IMcpServer): string {
+export function buildClaudeStdioAddArgs(server: IMcpServer): string[] {
   if (server.transport.type !== 'stdio') {
-    throw new Error('Claude stdio JSON config requires a stdio transport');
+    throw new Error('Claude stdio args require a stdio transport');
   }
 
-  return JSON.stringify({
-    command: server.transport.command,
-    args: server.transport.args || [],
-    env: server.transport.env || {},
-  });
+  const args = ['mcp', 'add', '-s', 'user'];
+
+  for (const [key, value] of Object.entries(server.transport.env || {})) {
+    args.push(`--env=${key}=${value}`);
+  }
+
+  args.push(server.name, '--', server.transport.command, ...(server.transport.args || []));
+  return args;
 }
 
 /**
@@ -158,20 +161,16 @@ export class ClaudeMcpAgent extends AbstractMcpAgent {
   /**
    * 安装MCP服务器到Claude Code agent
    */
-  installMcpServers(mcpServers: IMcpServer[]): Promise<McpOperationResult> {
+  installMcpServers(mcpServers: IMcpServer[], cliPath?: string): Promise<McpOperationResult> {
     const installOperation = async () => {
       try {
         for (const server of mcpServers) {
           if (server.transport.type === 'stdio') {
             try {
-              await safeExecFile(
-                'claude',
-                ['mcp', 'add-json', '-s', 'user', server.name, buildClaudeStdioJsonConfig(server)],
-                {
-                  timeout: 5000,
-                  ...getExecEnv(),
-                }
-              );
+              await this.execCli(cliPath, 'claude', buildClaudeStdioAddArgs(server), {
+                timeout: 5000,
+                ...getExecEnv(),
+              });
               console.log(`[ClaudeMcpAgent] Added MCP server: ${server.name}`);
             } catch (error) {
               console.warn(`Failed to add MCP ${server.name} to Claude Code:`, error);
@@ -186,17 +185,17 @@ export class ClaudeMcpAgent extends AbstractMcpAgent {
             // Claude CLI 使用 --transport http 处理 HTTP 和 Streamable HTTP
             // 格式: claude mcp add -s user --transport <type> <name> <url> [--header ...]
             const transportFlag = server.transport.type === 'streamable_http' ? 'http' : server.transport.type;
-            let command = `claude mcp add -s user --transport ${transportFlag} "${server.name}" "${server.transport.url}"`;
+            const args = ['mcp', 'add', '-s', 'user', '--transport', transportFlag, server.name, server.transport.url];
 
             // 添加 headers
             if (server.transport.headers) {
               for (const [key, value] of Object.entries(server.transport.headers)) {
-                command += ` --header "${key}: ${value}"`;
+                args.push('--header', `${key}: ${value}`);
               }
             }
 
             try {
-              await safeExec(command, {
+              await this.execCli(cliPath, 'claude', args, {
                 timeout: 5000,
                 ...getExecEnv(),
               });
@@ -219,7 +218,7 @@ export class ClaudeMcpAgent extends AbstractMcpAgent {
   /**
    * 从Claude Code agent删除MCP服务器
    */
-  removeMcpServer(mcpServerName: string): Promise<McpOperationResult> {
+  removeMcpServer(mcpServerName: string, _cliPath?: string): Promise<McpOperationResult> {
     const removeOperation = async () => {
       try {
         // 使用Claude CLI命令删除MCP服务器（尝试不同作用域）

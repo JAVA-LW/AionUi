@@ -10,6 +10,7 @@ import {
   buildBuiltinAcpSessionMcpServers,
   parseAcpMcpCapabilities,
 } from '../../src/process/agent/acp/mcpSessionConfig';
+import { buildGeminiAddArgs } from '../../src/process/services/mcpServices/agents/GeminiMcpAgent';
 
 describe('ACP built-in MCP session config', () => {
   it('injects only enabled built-in MCP servers and converts transport shape for session/new', () => {
@@ -113,6 +114,62 @@ describe('ACP built-in MCP session config', () => {
     ]);
   });
 
+  it('keeps the built-in image generation MCP injected even if its saved status is stale', () => {
+    const servers: IMcpServer[] = [
+      {
+        id: 'builtin-image-gen',
+        name: 'aionui-image-generation',
+        enabled: true,
+        builtin: true,
+        status: 'error',
+        transport: {
+          type: 'stdio',
+          command: 'node',
+          args: ['/abs/builtin-mcp-image-gen.js'],
+          env: {
+            AIONUI_IMG_PLATFORM: 'new-api',
+            AIONUI_IMG_BASE_URL: 'https://example.com/v1',
+            AIONUI_IMG_API_KEY: 'sk-test',
+            AIONUI_IMG_MODEL: 'grok-imagine-1.0',
+          },
+        },
+        createdAt: 1,
+        updatedAt: 1,
+        originalJson: '{}',
+      },
+      {
+        id: 'other-builtin-error',
+        name: 'Other Builtin',
+        enabled: true,
+        builtin: true,
+        status: 'error',
+        transport: {
+          type: 'stdio',
+          command: 'node',
+          args: ['/abs/other.js'],
+        },
+        createdAt: 1,
+        updatedAt: 1,
+        originalJson: '{}',
+      },
+    ];
+
+    expect(buildBuiltinAcpSessionMcpServers(servers)).toEqual([
+      {
+        type: 'stdio',
+        name: 'aionui-image-generation',
+        command: 'node',
+        args: ['/abs/builtin-mcp-image-gen.js'],
+        env: [
+          { name: 'AIONUI_IMG_PLATFORM', value: 'new-api' },
+          { name: 'AIONUI_IMG_BASE_URL', value: 'https://example.com/v1' },
+          { name: 'AIONUI_IMG_API_KEY', value: 'sk-test' },
+          { name: 'AIONUI_IMG_MODEL', value: 'grok-imagine-1.0' },
+        ],
+      },
+    ]);
+  });
+
   it('parses MCP capabilities from initialize response and defaults missing fields to true', () => {
     expect(
       parseAcpMcpCapabilities({
@@ -141,6 +198,49 @@ describe('ACP built-in MCP session config', () => {
   });
 });
 
+describe('GeminiMcpAgent helpers', () => {
+  it('builds stdio add args including image MCP env vars', () => {
+    const server: IMcpServer = {
+      id: 'builtin-image-gen',
+      name: 'aionui-image-generation',
+      enabled: true,
+      builtin: true,
+      transport: {
+        type: 'stdio',
+        command: 'node',
+        args: ['/abs/builtin-mcp-image-gen.js'],
+        env: {
+          AIONUI_IMG_PLATFORM: 'new-api',
+          AIONUI_IMG_BASE_URL: 'https://example.com/v1',
+          AIONUI_IMG_API_KEY: 'sk-test',
+          AIONUI_IMG_MODEL: 'grok-imagine-1.0',
+        },
+      },
+      createdAt: 1,
+      updatedAt: 1,
+      originalJson: '{}',
+    };
+
+    expect(buildGeminiAddArgs(server)).toEqual([
+      'mcp',
+      'add',
+      '-s',
+      'user',
+      '-e',
+      'AIONUI_IMG_PLATFORM=new-api',
+      '-e',
+      'AIONUI_IMG_BASE_URL=https://example.com/v1',
+      '-e',
+      'AIONUI_IMG_API_KEY=sk-test',
+      '-e',
+      'AIONUI_IMG_MODEL=grok-imagine-1.0',
+      'aionui-image-generation',
+      'node',
+      '/abs/builtin-mcp-image-gen.js',
+    ]);
+  });
+});
+
 const makeDetectedServer = (overrides: Partial<IMcpServer> = {}): IMcpServer => ({
   id: 'server-1',
   name: 'chrome-devtools',
@@ -160,6 +260,19 @@ const makeDetectedServer = (overrides: Partial<IMcpServer> = {}): IMcpServer => 
 const makeAgentClass = (detectMcpServers: () => Promise<IMcpServer[]>) =>
   class {
     detectMcpServers = detectMcpServers;
+  };
+
+const makeProtocolAgentClass = ({
+  detectMcpServers = vi.fn(async () => [] as IMcpServer[]),
+  installMcpServers = vi.fn(async () => ({ success: true })),
+  removeMcpServer = vi.fn(async () => ({ success: true })),
+  getSupportedTransports = vi.fn(() => [] as string[]),
+} = {}) =>
+  class {
+    detectMcpServers = detectMcpServers;
+    installMcpServers = installMcpServers;
+    removeMcpServer = removeMcpServer;
+    getSupportedTransports = getSupportedTransports;
   };
 
 describe('McpService Gemini detection', () => {
@@ -301,5 +414,103 @@ describe('McpService Gemini detection', () => {
 
     expect(result).toEqual([]);
     expect(builtinDetect).toHaveBeenCalledOnce();
+  });
+});
+
+describe('McpService MCP sync', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.clearAllMocks();
+  });
+
+  it('passes cliPath through to agent sync operations', async () => {
+    const emptyDetect = vi.fn(async () => []);
+    const installSpy = vi.fn(async () => ({ success: true }));
+
+    vi.doMock('child_process', () => ({
+      execSync: vi.fn(() => {
+        throw new Error('gemini not installed');
+      }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/ClaudeMcpAgent', () => ({
+      ClaudeMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/CodebuddyMcpAgent', () => ({
+      CodebuddyMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/QwenMcpAgent', () => ({
+      QwenMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/IflowMcpAgent', () => ({
+      IflowMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/GeminiMcpAgent', () => ({
+      GeminiMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/AionuiMcpAgent', () => ({
+      AionuiMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/CodexMcpAgent', () => ({
+      CodexMcpAgent: makeProtocolAgentClass({
+        detectMcpServers: emptyDetect,
+        installMcpServers: installSpy,
+      }),
+    }));
+
+    const { McpService } = await import('../../src/process/services/mcpServices/McpService');
+    const service = new McpService();
+    const server = makeDetectedServer();
+    const cliPath = 'C:\\Program Files\\OpenAI\\codex.cmd';
+
+    const syncResult = await service.syncMcpToAgents([server], [{ backend: 'codex', name: 'Codex', cliPath }]);
+
+    expect(syncResult.success).toBe(true);
+    expect(installSpy).toHaveBeenCalledWith([server], cliPath);
+  });
+
+  it('passes cliPath through to agent removal operations', async () => {
+    const emptyDetect = vi.fn(async () => [] as IMcpServer[]);
+    const removeSpy = vi.fn(async () => ({ success: true }));
+
+    vi.doMock('child_process', () => ({
+      execSync: vi.fn(() => {
+        throw new Error('gemini not installed');
+      }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/ClaudeMcpAgent', () => ({
+      ClaudeMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/CodebuddyMcpAgent', () => ({
+      CodebuddyMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/QwenMcpAgent', () => ({
+      QwenMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/IflowMcpAgent', () => ({
+      IflowMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/GeminiMcpAgent', () => ({
+      GeminiMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/AionuiMcpAgent', () => ({
+      AionuiMcpAgent: makeProtocolAgentClass({ detectMcpServers: emptyDetect }),
+    }));
+    vi.doMock('../../src/process/services/mcpServices/agents/CodexMcpAgent', () => ({
+      CodexMcpAgent: makeProtocolAgentClass({
+        detectMcpServers: emptyDetect,
+        removeMcpServer: removeSpy,
+      }),
+    }));
+
+    const { McpService } = await import('../../src/process/services/mcpServices/McpService');
+    const service = new McpService();
+    const cliPath = 'C:\\Program Files\\OpenAI\\codex.cmd';
+
+    const removeResult = await service.removeMcpFromAgents('aionui-image-generation', [
+      { backend: 'codex', name: 'Codex', cliPath },
+    ]);
+
+    expect(removeResult.success).toBe(true);
+    expect(removeSpy).toHaveBeenCalledWith('aionui-image-generation', cliPath);
   });
 });

@@ -13,7 +13,9 @@ import {
   getFileExtensionFromDataUrl,
   processImageUri,
   executeImageGeneration,
+  sanitizeGeneratedImageResponseText,
 } from '../../src/common/chat/imageGenCore';
+import { ClientFactory } from '../../src/common/api/ClientFactory';
 
 // ---------------------------------------------------------------------------
 // safeJsonParse
@@ -207,5 +209,74 @@ describe('executeImageGeneration — aborted signal', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('cancelled');
     expect(result.text).toContain('cancelled');
+  });
+});
+
+describe('sanitizeGeneratedImageResponseText', () => {
+  it('removes markdown data-url image payloads while keeping surrounding text', () => {
+    const result = sanitizeGeneratedImageResponseText(
+      'Here is your kitten:\n\n![Image](data:image/png;base64,ZmFrZQ==)\n\nEnjoy!'
+    );
+
+    expect(result).toBe('Here is your kitten:\n\nEnjoy!');
+    expect(result).not.toContain('data:image');
+  });
+
+  it('falls back to a short success message when the response only contains image payloads', () => {
+    const result = sanitizeGeneratedImageResponseText('![Image](data:image/jpeg;base64,ZmFrZQ==)');
+
+    expect(result).toBe('Image generated successfully.');
+  });
+});
+
+describe('executeImageGeneration - sanitized tool output', () => {
+  beforeEach(() => {
+    vi.spyOn(Date, 'now').mockReturnValue(1742628766500);
+    vi.spyOn(fsModule.promises, 'writeFile').mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('strips embedded base64 image payloads from returned text after saving the image', async () => {
+    vi.spyOn(ClientFactory, 'createRotatingClient').mockResolvedValue({
+      createChatCompletion: vi.fn(async () => ({
+        id: 'resp-1',
+        object: 'chat.completion',
+        created: 1,
+        model: 'gemini-3.1-flash-image-preview',
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: 'assistant',
+              content: 'Here is your kitten:\n\n![Image](data:image/png;base64,ZmFrZQ==)',
+            },
+            finish_reason: 'stop',
+          },
+        ],
+      })),
+    } as Awaited<ReturnType<typeof ClientFactory.createRotatingClient>>);
+
+    const result = await executeImageGeneration(
+      { prompt: 'generate a kitten' },
+      {
+        id: 'test',
+        name: 'New API',
+        platform: 'new-api',
+        baseUrl: 'https://example.com/v1',
+        apiKey: 'sk-test',
+        useModel: 'gemini-3.1-flash-image-preview',
+      },
+      '/workspace'
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.text).toContain('Here is your kitten:');
+    expect(result.text).toContain('Generated image saved to:');
+    expect(result.text).not.toContain('data:image');
+    expect(result.imagePath).toContain('img-1742628766500.png');
+    expect(result.relativeImagePath).toBe('img-1742628766500.png');
   });
 });

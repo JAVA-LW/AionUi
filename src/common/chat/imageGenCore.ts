@@ -79,6 +79,31 @@ export function getFileExtensionFromDataUrl(dataUrl: string): string {
   return DEFAULT_IMAGE_EXTENSION;
 }
 
+const IMAGE_MARKDOWN_REGEX =
+  /!\[[^\]]*\]\((data:image\/[^)]+|https?:\/\/[^)\s]+\.(?:jpg|jpeg|png|gif|webp|bmp|tiff|svg)(?:\?[^)]*)?|[^)\s]+\.(?:jpg|jpeg|png|gif|webp|bmp|tiff|svg)(?:\?[^)]*)?)\)/gi;
+const RAW_DATA_URL_REGEX = /data:image\/[^;]+;base64,[A-Za-z0-9+/=\r\n]+/gi;
+const B64_JSON_FIELD_REGEX = /"b64_json"\s*:\s*"[A-Za-z0-9+/=\r\n]+"/gi;
+
+/**
+ * Remove embedded image payloads from model text so tool results stay small.
+ * Keep human-readable text, but strip markdown image blobs / raw data URLs.
+ */
+export function sanitizeGeneratedImageResponseText(responseText: string): string {
+  if (!responseText || typeof responseText !== 'string') {
+    return 'Image generated successfully.';
+  }
+
+  const sanitized = responseText
+    .replace(IMAGE_MARKDOWN_REGEX, '')
+    .replace(RAW_DATA_URL_REGEX, '')
+    .replace(B64_JSON_FIELD_REGEX, '"b64_json":"[omitted]"')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return sanitized || 'Image generated successfully.';
+}
+
 export async function saveGeneratedImage(base64Data: string, workspaceDir: string): Promise<string> {
   const timestamp = Date.now();
   const fileExtension = getFileExtensionFromDataUrl(base64Data);
@@ -291,8 +316,10 @@ export async function executeImageGeneration(
       }
     }
 
+    const sanitizedResponseText = sanitizeGeneratedImageResponseText(responseText);
+
     if (!images || images.length === 0) {
-      const warningMessage = `Image generation did not produce any images.\n\nModel response: ${responseText}\n\nTip: Make sure your image generation model supports this type of request. Current model: ${provider.useModel}`;
+      const warningMessage = `Image generation did not produce any images.\n\nModel response: ${sanitizedResponseText}\n\nTip: Make sure your image generation model supports this type of request. Current model: ${provider.useModel}`;
       return { success: true, text: warningMessage };
     }
 
@@ -303,7 +330,7 @@ export async function executeImageGeneration(
 
       return {
         success: true,
-        text: `${responseText}\n\nGenerated image saved to: ${imagePath}`,
+        text: `${sanitizedResponseText}\n\nGenerated image saved to: ${imagePath}`,
         imagePath,
         relativeImagePath,
       };

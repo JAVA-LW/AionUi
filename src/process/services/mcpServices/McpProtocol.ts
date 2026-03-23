@@ -6,7 +6,7 @@
 
 import { app } from 'electron';
 import { promises as fs } from 'fs';
-import { safeExec } from '@process/utils/safeExec';
+import { safeExec, safeExecFile } from '@process/utils/safeExec';
 import type { AcpBackendAll } from '@/common/types/acpTypes';
 import { JSONRPC_VERSION } from '@/common/types/acpTypes';
 import type { IMcpServer } from '@/common/config/storage';
@@ -77,14 +77,14 @@ export interface IMcpProtocol {
    * @param mcpServers 要安装的MCP服务器列表
    * @returns 操作结果
    */
-  installMcpServers(mcpServers: IMcpServer[]): Promise<McpOperationResult>;
+  installMcpServers(mcpServers: IMcpServer[], cliPath?: string): Promise<McpOperationResult>;
 
   /**
    * 从agent删除MCP服务器
    * @param mcpServerName 要删除的MCP服务器名称
    * @returns 操作结果
    */
-  removeMcpServer(mcpServerName: string): Promise<McpOperationResult>;
+  removeMcpServer(mcpServerName: string, cliPath?: string): Promise<McpOperationResult>;
 
   /**
    * 测试MCP服务器连接
@@ -145,14 +145,41 @@ export abstract class AbstractMcpAgent implements IMcpProtocol {
 
   abstract detectMcpServers(cliPath?: string): Promise<IMcpServer[]>;
 
-  abstract installMcpServers(mcpServers: IMcpServer[]): Promise<McpOperationResult>;
+  abstract installMcpServers(mcpServers: IMcpServer[], cliPath?: string): Promise<McpOperationResult>;
 
-  abstract removeMcpServer(mcpServerName: string): Promise<McpOperationResult>;
+  abstract removeMcpServer(mcpServerName: string, cliPath?: string): Promise<McpOperationResult>;
 
   abstract getSupportedTransports(): string[];
 
   getBackendType(): McpSource {
     return this.backend;
+  }
+
+  protected execCli(
+    cliPath: string | undefined,
+    fallbackCommand: string,
+    args: string[],
+    options: {
+      timeout?: number;
+      env?: NodeJS.ProcessEnv;
+    } = {}
+  ): Promise<{ stdout: string; stderr: string }> {
+    const resolvedCliPath = cliPath?.trim() || fallbackCommand;
+
+    if (process.platform !== 'win32') {
+      return safeExecFile(resolvedCliPath, args, options);
+    }
+
+    const commandLine = [resolvedCliPath, ...args].map((arg) => this.quoteWindowsCmdArg(arg)).join(' ');
+    return safeExec(`chcp 65001 >nul && ${commandLine}`, options);
+  }
+
+  private quoteWindowsCmdArg(arg: string): string {
+    if (arg.length === 0) {
+      return '""';
+    }
+
+    return /[\s"&|<>^()]/.test(arg) ? `"${arg.replace(/"/g, '""')}"` : arg;
   }
 
   /**

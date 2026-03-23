@@ -14,7 +14,6 @@ import {
   isBuiltinImageGenTransport,
 } from '@process/resources/builtinMcp/constants';
 import { getEnhancedEnv } from '@process/utils/shellEnv';
-import { safeExecFile } from '@process/utils/safeExec';
 
 /** Env options for exec calls — ensures CLI is found from Finder/launchd launches */
 const getExecEnv = () => ({
@@ -157,10 +156,10 @@ export class CodexMcpAgent extends AbstractMcpAgent {
   /**
    * 检测 Codex CLI 的 MCP 配置
    */
-  detectMcpServers(_cliPath?: string): Promise<IMcpServer[]> {
+  detectMcpServers(cliPath?: string): Promise<IMcpServer[]> {
     const detectOperation = async () => {
       try {
-        const { stdout: result } = await safeExecFile('codex', ['mcp', 'list', '--json'], {
+        const { stdout: result } = await this.execCli(cliPath, 'codex', ['mcp', 'list', '--json'], {
           timeout: this.timeout,
           ...getExecEnv(),
         });
@@ -197,7 +196,7 @@ export class CodexMcpAgent extends AbstractMcpAgent {
   /**
    * 安装 MCP 服务器到 Codex CLI
    */
-  installMcpServers(mcpServers: IMcpServer[]): Promise<McpOperationResult> {
+  installMcpServers(mcpServers: IMcpServer[], cliPath?: string): Promise<McpOperationResult> {
     const installOperation = async () => {
       try {
         for (const server of mcpServers) {
@@ -223,7 +222,7 @@ export class CodexMcpAgent extends AbstractMcpAgent {
           }
 
           try {
-            await safeExecFile('codex', args, { timeout: 5000, ...getExecEnv() });
+            await this.execCli(cliPath, 'codex', args, { timeout: 5000, ...getExecEnv() });
             console.log(`[CodexMcpAgent] Added MCP server: ${server.name}`);
           } catch (error) {
             console.warn(`Failed to add MCP ${server.name} to Codex:`, error);
@@ -242,7 +241,7 @@ export class CodexMcpAgent extends AbstractMcpAgent {
   /**
    * 从 Codex CLI 删除 MCP 服务器
    */
-  removeMcpServer(mcpServerName: string): Promise<McpOperationResult> {
+  removeMcpServer(mcpServerName: string, cliPath?: string): Promise<McpOperationResult> {
     const removeOperation = async () => {
       try {
         const candidateNames = Array.from(
@@ -255,7 +254,7 @@ export class CodexMcpAgent extends AbstractMcpAgent {
 
         for (const candidateName of candidateNames) {
           try {
-            const result = await safeExecFile('codex', ['mcp', 'remove', candidateName], {
+            const result = await this.execCli(cliPath, 'codex', ['mcp', 'remove', candidateName], {
               timeout: 5000,
               ...getExecEnv(),
             });

@@ -152,7 +152,7 @@ export class IflowMcpAgent extends AbstractMcpAgent {
   /**
    * 安装MCP服务器到iFlow agent
    */
-  installMcpServers(mcpServers: IMcpServer[]): Promise<McpOperationResult> {
+  installMcpServers(mcpServers: IMcpServer[], _cliPath?: string): Promise<McpOperationResult> {
     const installOperation = async () => {
       try {
         // 获取当前已配置的iFlow MCP服务器列表（使用内部方法避免死锁）
@@ -232,7 +232,7 @@ export class IflowMcpAgent extends AbstractMcpAgent {
   /**
    * 从iFlow agent删除MCP服务器
    */
-  removeMcpServer(mcpServerName: string): Promise<McpOperationResult> {
+  removeMcpServer(mcpServerName: string, _cliPath?: string): Promise<McpOperationResult> {
     const removeOperation = async () => {
       try {
         // 使用iFlow CLI remove命令删除MCP服务器（尝试不同作用域）
