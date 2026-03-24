@@ -43,7 +43,7 @@ export class ApiCallbackManager {
   }
 
   private async handleTurnCompleted(event: IConversationTurnCompletedEvent): Promise<void> {
-    const db = getDatabase();
+    const db = await getDatabase();
 
     const configResult = db.getApiConfig();
     if (

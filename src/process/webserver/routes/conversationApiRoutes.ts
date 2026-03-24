@@ -10,7 +10,7 @@ import { validateApiToken } from '../middleware/apiAuthMiddleware';
 import { apiRateLimiter } from '../middleware/security';
 import { conversationServiceSingleton } from '@process/services/conversationServiceSingleton';
 import { workerTaskManager } from '@process/task/workerTaskManagerSingleton';
-import { getDatabase } from '@process/services/database';
+import { getDatabase, getDatabaseSync } from '@process/services/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import {
   drainConversationRuntime,
@@ -164,7 +164,8 @@ const dispatchConversationMessage = async (
   conversationType?: TChatConversation['type']
 ): Promise<MessageDispatchResult> => {
   try {
-    const resolvedConversationType = conversationType ?? getDatabase().getConversation(conversationId).data?.type;
+    const resolvedConversationType =
+      conversationType ?? (await getDatabase()).getConversation(conversationId).data?.type;
     if (!resolvedConversationType) {
       return {
         success: false,
@@ -502,7 +503,7 @@ const getDefaultConversationStatusCandidateTasks = (): ConversationStatusCandida
 
 const getDefaultConversationBusyStates = (): ConversationBusyStateMap => cronBusyGuard.getAllStates();
 
-const getDefaultConversationStatusListDatabase = (): ConversationStatusListDatabase => getDatabase();
+const getDefaultConversationStatusListDatabase = (): ConversationStatusListDatabase => getDatabaseSync();
 
 const getDefaultConversationStatusCandidateIds = (): string[] => collectConversationStatusCandidateIds();
 
@@ -652,7 +653,7 @@ export const buildConversationUsageMonitorResponse = (result: ConversationTokenU
 });
 
 const waitForStopConfirmed = async (sessionId: string, timeoutMs: number): Promise<void> => {
-  const db = getDatabase();
+  const db = await getDatabase();
   const startedAt = Date.now();
   let lastState: ConversationRuntimeState | undefined;
 
@@ -1002,7 +1003,7 @@ router.get('/status', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
 
     // Get conversation
     const convResult = db.getConversation(sessionId);
@@ -1100,7 +1101,7 @@ router.get('/status/list', async (_req: Request, res: Response) => {
       state,
     });
 
-    const db = getDatabase();
+    const db = await getDatabase();
     const conversations = getConversationStatusListConversations(scope, { db });
     const items = buildConversationStatusList(conversations, {
       scope,
@@ -1156,7 +1157,7 @@ router.post('/stop', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
 
     // Verify conversation exists
     const convResult = db.getConversation(sessionId);
@@ -1251,7 +1252,7 @@ router.post('/message', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
 
     // Verify conversation exists
     const convResult = db.getConversation(sessionId);
@@ -1349,7 +1350,7 @@ router.get('/messages', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
 
     // Verify conversation exists
     const convResult = db.getConversation(sessionId);
@@ -1394,7 +1395,7 @@ router.get('/usage/monitor', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
     const monitorResult = db.getConversationTokenUsageMonitor(rangeResult.range);
     if (!monitorResult.success || !monitorResult.data) {
       return res.status(500).json({
@@ -1438,7 +1439,7 @@ router.get('/usage', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
     const convResult = db.getConversation(sessionId);
     if (!convResult.success || !convResult.data) {
       return res.status(404).json({
@@ -1496,7 +1497,7 @@ router.get('/usage/list', async (req: Request, res: Response) => {
       });
     }
 
-    const db = getDatabase();
+    const db = await getDatabase();
     const items: ConversationUsageSummaryListItem[] = [];
     const notFoundSessionIds: string[] = [];
 

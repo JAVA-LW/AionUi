@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { IConversationTurnCompletedEvent } from '@/common/adapter/ipcBridge';
 import type { TChatConversation } from '@/common/config/storage';
-import { getDatabase } from '@process/services/database';
+import { getDatabaseSync } from '@process/services/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { getConversationRuntimeTask } from '@process/services/ConversationRuntimeService';
 import { flushConversationMessages } from '@process/utils/message';
@@ -269,7 +269,7 @@ export const getConversationStatusSnapshot = (
   sessionId: string,
   options: ConversationStatusSnapshotOptions = {}
 ): ConversationStatusSnapshot | null => {
-  const db = getDatabase();
+  const db = getDatabaseSync();
   const convResult = db.getConversation(sessionId);
   if (!convResult.success || !convResult.data) {
     return null;

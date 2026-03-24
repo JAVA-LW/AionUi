@@ -12,7 +12,7 @@ import { getDatabase } from '@process/services/database';
  * Validates Bearer token from Authorization header
  * API Token 认证中间件 - 验证 Authorization 头中的 Bearer token
  */
-export const validateApiToken = (req: Request, res: Response, next: NextFunction): void => {
+export const validateApiToken = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     // 1. Extract token from Authorization header
     const authHeader = req.headers.authorization;
@@ -36,7 +36,7 @@ export const validateApiToken = (req: Request, res: Response, next: NextFunction
     }
 
     // 2. Get API config from database
-    const db = getDatabase();
+    const db = await getDatabase();
     const configResult = db.getApiConfig();
 
     if (!configResult.success) {

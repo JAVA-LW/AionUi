@@ -24,14 +24,14 @@ type ReleaseConversationMessageCacheOptions = {
 // Aggregate multiple messages for synchronous updates, reducing database operations
 class ConversationManageWithDB {
   private stack: Array<['insert' | 'accumulate', TMessage]> = [];
-  private db = getDatabase();
+  private dbPromise = getDatabase();
   private timer?: NodeJS.Timeout;
   private savePromise: Promise<void> = Promise.resolve();
   private lastActivityAt = Date.now();
   private releaseTimer?: NodeJS.Timeout;
 
   constructor(private conversation_id: string) {
-    this.savePromise = ensureConversationExists(this.db, this.conversation_id).catch((): void => {});
+    this.savePromise = this.dbPromise.then((db) => ensureConversationExists(db, this.conversation_id)).catch((): void => {});
   }
 
   static get(conversation_id: string) {
@@ -66,25 +66,26 @@ class ConversationManageWithDB {
 
     this.clearFlushTimer();
     this.savePromise = this.savePromise
-      .then(() => {
+      .then(() => this.dbPromise)
+      .then((db) => {
         if (this.stack.length === 0) {
           return;
         }
 
         const stack = this.stack.slice();
         this.stack = [];
-        const messages = this.db.getConversationMessages(this.conversation_id, 0, 50, 'DESC'); //
+        const messages = db.getConversationMessages(this.conversation_id, 0, 50, 'DESC'); //
         let messageList = messages.data.toReversed();
         let updateMessage = stack.shift();
         while (updateMessage) {
           if (updateMessage[0] === 'insert') {
-            this.db.insertMessage(updateMessage[1]);
+            db.insertMessage(updateMessage[1]);
             messageList.push(updateMessage[1]);
           } else {
             messageList = composeMessage(updateMessage[1], messageList, (type, message) => {
-              if (type === 'insert') this.db.insertMessage(message);
+              if (type === 'insert') db.insertMessage(message);
               if (type === 'update') {
-                this.db.updateMessage(message.id, message);
+                db.updateMessage(message.id, message);
               }
             });
           }
@@ -204,7 +205,10 @@ export const addMessage = (conversation_id: string, message: TMessage): void => 
  * Ensure conversation exists in database
  * If not, load from file storage and create it
  */
-async function ensureConversationExists(db: ReturnType<typeof getDatabase>, conversation_id: string): Promise<void> {
+async function ensureConversationExists(
+  db: Awaited<ReturnType<typeof getDatabase>>,
+  conversation_id: string
+): Promise<void> {
   // Check if conversation exists in database
   const existingConv = db.getConversation(conversation_id);
   if (existingConv.success && existingConv.data) {

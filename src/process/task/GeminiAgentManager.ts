@@ -19,7 +19,7 @@ import { getProviderAuthType } from '@/common/utils/platformAuthType';
 import { AuthType, getOauthInfoWithCache, Storage } from '@office-ai/aioncli-core';
 import { GeminiApprovalStore } from '../agent/gemini/GeminiApprovalStore';
 import { ToolConfirmationOutcome } from '../agent/gemini/cli/tools/tools';
-import { getDatabase } from '@process/services/database';
+import { getDatabase, getDatabaseSync } from '@process/services/database';
 import {
   addMessage,
   addOrUpdateMessage,
@@ -84,7 +84,7 @@ export class GeminiAgentManager extends BaseAgentManager<
 
   private async injectHistoryFromDatabase(): Promise<void> {
     try {
-      const result = getDatabase().getConversationMessages(this.conversation_id, 0, 10000);
+      const result = (await getDatabase()).getConversationMessages(this.conversation_id, 0, 10000);
       const data = (result.data || []) as TMessage[];
       const lines = data
         .filter((m): m is IMessageText => m.type === 'text')
@@ -336,7 +336,7 @@ export class GeminiAgentManager extends BaseAgentManager<
     // Without this, chat.history.refresh fires before modifyTime is updated,
     // causing stale sorting until a manual page refresh.
     try {
-      getDatabase().updateConversation(this.conversation_id, {});
+      (await getDatabase()).updateConversation(this.conversation_id, {});
     } catch {
       // Conversation might not exist in DB yet
     }
@@ -416,7 +416,11 @@ export class GeminiAgentManager extends BaseAgentManager<
     if (!confirmationDetails) return {};
     let question: string;
     let description: string;
-    const options: Array<{ label: string; value: ToolConfirmationOutcome; params?: Record<string, string> }> = [];
+    const options: Array<{
+      label: string;
+      value: ToolConfirmationOutcome;
+      params?: Record<string, string>;
+    }> = [];
     switch (confirmationDetails.type) {
       case 'edit':
         {
@@ -431,7 +435,10 @@ export class GeminiAgentManager extends BaseAgentManager<
               label: t('messages.confirmation.yesAllowAlways'),
               value: ToolConfirmationOutcome.ProceedAlways,
             },
-            { label: t('messages.confirmation.no'), value: ToolConfirmationOutcome.Cancel }
+            {
+              label: t('messages.confirmation.no'),
+              value: ToolConfirmationOutcome.Cancel,
+            }
           );
         }
         break;
@@ -448,7 +455,10 @@ export class GeminiAgentManager extends BaseAgentManager<
               label: t('messages.confirmation.yesAllowAlways'),
               value: ToolConfirmationOutcome.ProceedAlways,
             },
-            { label: t('messages.confirmation.no'), value: ToolConfirmationOutcome.Cancel }
+            {
+              label: t('messages.confirmation.no'),
+              value: ToolConfirmationOutcome.Cancel,
+            }
           );
         }
         break;
@@ -465,7 +475,10 @@ export class GeminiAgentManager extends BaseAgentManager<
               label: t('messages.confirmation.yesAllowAlways'),
               value: ToolConfirmationOutcome.ProceedAlways,
             },
-            { label: t('messages.confirmation.no'), value: ToolConfirmationOutcome.Cancel }
+            {
+              label: t('messages.confirmation.no'),
+              value: ToolConfirmationOutcome.Cancel,
+            }
           );
         }
         break;
@@ -487,7 +500,10 @@ export class GeminiAgentManager extends BaseAgentManager<
               serverName: mcpProps.serverName,
             }),
             value: ToolConfirmationOutcome.ProceedAlwaysTool,
-            params: { toolName: mcpProps.toolName, serverName: mcpProps.serverName },
+            params: {
+              toolName: mcpProps.toolName,
+              serverName: mcpProps.serverName,
+            },
           },
           {
             label: t('messages.confirmation.yesAlwaysAllowServer', {
@@ -496,7 +512,10 @@ export class GeminiAgentManager extends BaseAgentManager<
             value: ToolConfirmationOutcome.ProceedAlwaysServer,
             params: { serverName: mcpProps.serverName },
           },
-          { label: t('messages.confirmation.no'), value: ToolConfirmationOutcome.Cancel }
+          {
+            label: t('messages.confirmation.no'),
+            value: ToolConfirmationOutcome.Cancel,
+          }
         );
       }
     }
@@ -553,8 +572,14 @@ export class GeminiAgentManager extends BaseAgentManager<
             description: content.description || content.name || 'Tool requires confirmation',
             callId: content.callId,
             options: [
-              { label: 'messages.confirmation.yesAllowOnce', value: ToolConfirmationOutcome.ProceedOnce },
-              { label: 'messages.confirmation.no', value: ToolConfirmationOutcome.Cancel },
+              {
+                label: 'messages.confirmation.yesAllowOnce',
+                value: ToolConfirmationOutcome.ProceedOnce,
+              },
+              {
+                label: 'messages.confirmation.no',
+                value: ToolConfirmationOutcome.Cancel,
+              },
             ],
           });
           return;
@@ -708,7 +733,7 @@ export class GeminiAgentManager extends BaseAgentManager<
   private async checkCronCommandsOnFinish(afterTimestamp: number): Promise<boolean> {
     try {
       await flushConversationMessages(this.conversation_id);
-      const db = getDatabase();
+      const db = await getDatabase();
       const result = db.getConversationMessages(this.conversation_id, 0, 20, 'DESC');
 
       if (!result.data || result.data.length === 0) {
@@ -801,7 +826,7 @@ export class GeminiAgentManager extends BaseAgentManager<
       return;
     }
 
-    const db = getDatabase();
+    const db = getDatabaseSync();
     const result = db.recordConversationTokenUsage({
       conversationId: this.conversation_id,
       backend: 'gemini',
@@ -825,7 +850,7 @@ export class GeminiAgentManager extends BaseAgentManager<
 
   private saveTokenUsageToConversationExtra(tokenUsage: TokenUsageData): void {
     try {
-      const db = getDatabase();
+      const db = getDatabaseSync();
       const result = db.getConversation(this.conversation_id);
       if (result.success && result.data && result.data.type === 'gemini') {
         const conversation = result.data;
@@ -882,9 +907,9 @@ export class GeminiAgentManager extends BaseAgentManager<
    * Save session mode to database for resume support.
    * 保存会话模式到数据库以支持恢复。
    */
-  private saveSessionMode(mode: string): void {
+  private async saveSessionMode(mode: string): Promise<void> {
     try {
-      const db = getDatabase();
+      const db = await getDatabase();
       const result = db.getConversation(this.conversation_id);
       if (result.success && result.data && result.data.type === 'gemini') {
         const conversation = result.data;
@@ -892,7 +917,9 @@ export class GeminiAgentManager extends BaseAgentManager<
           ...conversation.extra,
           sessionMode: mode,
         };
-        db.updateConversation(this.conversation_id, { extra: updatedExtra } as Partial<typeof conversation>);
+        db.updateConversation(this.conversation_id, {
+          extra: updatedExtra,
+        } as Partial<typeof conversation>);
       }
     } catch (error) {
       mainError('[GeminiAgentManager]', 'Failed to save session mode', error);
@@ -908,7 +935,10 @@ export class GeminiAgentManager extends BaseAgentManager<
     try {
       const config = await ProcessConfig.get('gemini.config');
       if (config?.yoloMode) {
-        await ProcessConfig.set('gemini.config', { ...config, yoloMode: false });
+        await ProcessConfig.set('gemini.config', {
+          ...config,
+          yoloMode: false,
+        });
       }
     } catch (error) {
       mainError('[GeminiAgentManager]', 'Failed to clear legacy yoloMode config', error);

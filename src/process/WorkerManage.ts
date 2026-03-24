@@ -13,7 +13,7 @@ import OpenClawAgentManager from './task/OpenClawAgentManager';
 import { ProcessChat } from '@process/utils/initStorage';
 import type AgentBaseTask from './task/BaseAgentManager';
 import { GeminiAgentManager } from './task/GeminiAgentManager';
-import { getDatabase } from '@process/services/database';
+import { getDatabase, getDatabaseSync } from '@process/services/database';
 import { releaseConversationMessageCache } from '@process/utils/message';
 import { cronBusyGuard } from './services/cron/CronBusyGuard';
 import { ConversationTurnCompletionService } from './services/ConversationTurnCompletionService';
@@ -76,7 +76,12 @@ const destroyTask = async (id: string, task: AgentBaseTask<unknown>) => {
 };
 
 const isPrunableConversation = (id: string): boolean => {
-  const db = getDatabase();
+  let db;
+  try {
+    db = getDatabaseSync();
+  } catch {
+    return false;
+  }
   const result = db.getConversation(id);
   if (!result.success || !result.data) {
     return false;
@@ -221,7 +226,7 @@ const getTaskByIdRollbackBuild = async (
   }
 
   // Try to load from database first
-  const db = getDatabase();
+  const db = await getDatabase();
   const dbResult = db.getConversation(id);
   console.log(`[WorkerManage] Database lookup result: success=${dbResult.success}, hasData=${!!dbResult.data}`);
 

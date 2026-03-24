@@ -16,7 +16,7 @@ import {
   getReadOnlyConversationStatusSnapshot,
 } from '@process/services/ConversationTurnCompletionService';
 import { getConversationMessageCacheStats } from '@process/utils/message';
-import { getDatabase } from '@process/services/database';
+import { getDatabaseSync } from '@process/services/database';
 
 type DiagnosticsSnapshotInput = {
   route: string;
@@ -275,7 +275,7 @@ export class ApiDiagnosticsService {
   }
 
   createSnapshot(input: DiagnosticsSnapshotInput) {
-    const db = getDatabase();
+    const db = getDatabaseSync();
     const conversationCount = db.getUserConversations(undefined, 0, 1).total;
     const messageCache = getConversationMessageCacheStats();
     const busyStates = Array.from(cronBusyGuard.getAllStates().entries()).map(([conversationId, state]) => ({
@@ -450,7 +450,7 @@ export class ApiDiagnosticsService {
     messageCacheConversationIds: string[];
     inFlightSessionIds: string[];
   }): ActiveRuntimeSession[] {
-    const db = getDatabase();
+    const db = getDatabaseSync();
     const candidates = new Map<string, number>();
     const now = Date.now();
 
