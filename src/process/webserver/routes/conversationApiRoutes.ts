@@ -174,9 +174,7 @@ const dispatchConversationMessage = async (
 
     const task = await workerTaskManager.getOrBuildTask(conversationId);
     const payload =
-      resolvedConversationType === 'gemini'
-        ? { input: message, msg_id: msgId }
-        : { content: message, msg_id: msgId };
+      resolvedConversationType === 'gemini' ? { input: message, msg_id: msgId } : { content: message, msg_id: msgId };
 
     await task.sendMessage(payload);
     return { success: true };

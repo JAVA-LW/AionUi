@@ -139,12 +139,7 @@ function getExactVersion(spec) {
 function getAionCliOpenTelemetryRepairs() {
   const packageDir = path.resolve(__dirname, '../node_modules/@office-ai/aioncli-core');
   const nodeModulesDir = path.join(packageDir, 'node_modules');
-  const sdkMetricsPackageJsonPath = path.join(
-    nodeModulesDir,
-    '@opentelemetry',
-    'sdk-metrics',
-    'package.json'
-  );
+  const sdkMetricsPackageJsonPath = path.join(nodeModulesDir, '@opentelemetry', 'sdk-metrics', 'package.json');
 
   if (!fs.existsSync(sdkMetricsPackageJsonPath)) {
     return { packageDir, repairs: [] };
@@ -174,38 +169,31 @@ function repairAionCliOpenTelemetryDeps() {
     return;
   }
 
-  console.log(
-    `🔧 Repairing nested OpenTelemetry deps for @office-ai/aioncli-core: ${repairs.join(', ')}`
-  );
+  console.log(`🔧 Repairing nested OpenTelemetry deps for @office-ai/aioncli-core: ${repairs.join(', ')}`);
 
   const installArgs = ['install', '--no-save', '--ignore-scripts', '--no-package-lock', ...repairs];
-  const result = process.platform === 'win32'
-    ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm.cmd', ...installArgs], {
-        cwd: packageDir,
-        stdio: 'inherit',
-      })
-    : spawnSync('npm', installArgs, {
-        cwd: packageDir,
-        stdio: 'inherit',
-      });
+  const result =
+    process.platform === 'win32'
+      ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm.cmd', ...installArgs], {
+          cwd: packageDir,
+          stdio: 'inherit',
+        })
+      : spawnSync('npm', installArgs, {
+          cwd: packageDir,
+          stdio: 'inherit',
+        });
 
   if (result.error) {
-    throw new Error(
-      `Failed to launch nested OpenTelemetry repair command: ${result.error.message}`
-    );
+    throw new Error(`Failed to launch nested OpenTelemetry repair command: ${result.error.message}`);
   }
 
   if (result.status !== 0) {
-    throw new Error(
-      `Failed to repair nested OpenTelemetry dependencies (exit code ${result.status})`
-    );
+    throw new Error(`Failed to repair nested OpenTelemetry dependencies (exit code ${result.status})`);
   }
 
   const verification = getAionCliOpenTelemetryRepairs();
   if (verification.repairs.length > 0) {
-    throw new Error(
-      `Nested OpenTelemetry dependency repair incomplete: ${verification.repairs.join(', ')}`
-    );
+    throw new Error(`Nested OpenTelemetry dependency repair incomplete: ${verification.repairs.join(', ')}`);
   }
 }
 

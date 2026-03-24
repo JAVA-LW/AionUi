@@ -91,7 +91,7 @@ describe('CodexMcpAgent helpers', () => {
   it('uses cliPath for codex MCP detection', async () => {
     const agent = new CodexMcpAgent();
     const cliPath = 'C:\\Program Files\\OpenAI\\codex.cmd';
-    const execCliSpy = vi.spyOn(agent as CodexMcpAgent & { execCli: typeof agent['execCli'] }, 'execCli');
+    const execCliSpy = vi.spyOn(agent as CodexMcpAgent & { execCli: (typeof agent)['execCli'] }, 'execCli');
     const testConnectionSpy = vi.spyOn(agent, 'testMcpConnection').mockResolvedValue({
       success: true,
       tools: [{ name: 'aionui_image_generation' }],
@@ -131,7 +131,7 @@ describe('CodexMcpAgent helpers', () => {
   it('uses cliPath for codex MCP removal', async () => {
     const agent = new CodexMcpAgent();
     const cliPath = 'C:\\Program Files\\OpenAI\\codex.cmd';
-    const execCliSpy = vi.spyOn(agent as CodexMcpAgent & { execCli: typeof agent['execCli'] }, 'execCli');
+    const execCliSpy = vi.spyOn(agent as CodexMcpAgent & { execCli: (typeof agent)['execCli'] }, 'execCli');
 
     execCliSpy.mockResolvedValue({
       stdout: 'Removed MCP server aionui-image-generation',

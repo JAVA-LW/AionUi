@@ -198,7 +198,8 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('resolves generating scope explicitly and falls back to all for explicit status or state filters', async () => {
-    const { resolveConversationStatusListScope } = await import('../../src/process/webserver/routes/conversationApiRoutes');
+    const { resolveConversationStatusListScope } =
+      await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     expect(
       resolveConversationStatusListScope({
@@ -540,7 +541,8 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('collects runtime candidate ids without including idle busy-guard entries', async () => {
-    const { collectConversationStatusCandidateIds } = await import('../../src/process/webserver/routes/conversationApiRoutes');
+    const { collectConversationStatusCandidateIds } =
+      await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const result = collectConversationStatusCandidateIds(
       [{ id: 'task-1' }, { id: 'task-2' }],
@@ -554,7 +556,8 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('resolves active status list conversations from runtime candidates instead of scanning full history', async () => {
-    const { getConversationStatusListConversations } = await import('../../src/process/webserver/routes/conversationApiRoutes');
+    const { getConversationStatusListConversations } =
+      await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const db = {
       getConversation: vi.fn((conversationId: string) => {
@@ -610,7 +613,8 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('uses full history for non-runtime scopes that need completed sessions', async () => {
-    const { getConversationStatusListConversations } = await import('../../src/process/webserver/routes/conversationApiRoutes');
+    const { getConversationStatusListConversations } =
+      await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const db = {
       getConversation: vi.fn(),
@@ -763,7 +767,8 @@ describe('conversationApiRoutes helpers', () => {
   });
 
   it('builds usage monitor payload with overall and grouped aggregates', async () => {
-    const { buildConversationUsageMonitorResponse } = await import('../../src/process/webserver/routes/conversationApiRoutes');
+    const { buildConversationUsageMonitorResponse } =
+      await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     const result = buildConversationUsageMonitorResponse({
       range: {

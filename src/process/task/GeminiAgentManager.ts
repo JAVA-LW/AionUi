@@ -20,7 +20,12 @@ import { AuthType, getOauthInfoWithCache, Storage } from '@office-ai/aioncli-cor
 import { GeminiApprovalStore } from '../agent/gemini/GeminiApprovalStore';
 import { ToolConfirmationOutcome } from '../agent/gemini/cli/tools/tools';
 import { getDatabase } from '@process/services/database';
-import { addMessage, addOrUpdateMessage, flushConversationMessages, nextTickToLocalFinish } from '@process/utils/message';
+import {
+  addMessage,
+  addOrUpdateMessage,
+  flushConversationMessages,
+  nextTickToLocalFinish,
+} from '@process/utils/message';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { ConversationTurnCompletionService } from '@process/services/ConversationTurnCompletionService';
 import { handlePreviewOpenEvent } from '@process/utils/previewUtils';

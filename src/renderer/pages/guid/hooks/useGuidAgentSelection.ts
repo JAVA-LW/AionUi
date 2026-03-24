@@ -10,13 +10,7 @@ import { DEFAULT_CODEX_MODELS } from '@/common/types/codex/codexModels';
 import { getDefaultAcpConfigOptions } from '@/common/types/codex/codexConfigOptions';
 import type { IProvider } from '@/common/config/storage';
 import { ConfigStorage } from '@/common/config/storage';
-import type {
-  AcpBackend,
-  AcpBackendConfig,
-  AcpModelInfo,
-  AvailableAgent,
-  EffectiveAgentInfo,
-} from '../types';
+import type { AcpBackend, AcpBackendConfig, AcpModelInfo, AvailableAgent, EffectiveAgentInfo } from '../types';
 import { getAgentModes } from '@/renderer/utils/model/agentModes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';

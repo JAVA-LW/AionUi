@@ -125,11 +125,7 @@ describe('applicationBridge CDP functionality', () => {
           outputDir: '/mock/api-diagnostics',
           sampleIntervalMs: 60000,
         })),
-        updateConfig: vi.fn((config: {
-          enabled?: boolean;
-          outputDir?: string;
-          sampleIntervalMs?: number;
-        }) => ({
+        updateConfig: vi.fn((config: { enabled?: boolean; outputDir?: string; sampleIntervalMs?: number }) => ({
           enabled: config.enabled ?? false,
           outputDir: config.outputDir ?? '/mock/api-diagnostics',
           sampleIntervalMs: config.sampleIntervalMs ?? 60000,
@@ -344,11 +340,7 @@ describe('CDP configuration functions', () => {
           outputDir: '/mock/api-diagnostics',
           sampleIntervalMs: 60000,
         })),
-        updateConfig: vi.fn((config: {
-          enabled?: boolean;
-          outputDir?: string;
-          sampleIntervalMs?: number;
-        }) => ({
+        updateConfig: vi.fn((config: { enabled?: boolean; outputDir?: string; sampleIntervalMs?: number }) => ({
           enabled: config.enabled ?? false,
           outputDir: config.outputDir ?? '/mock/api-diagnostics',
           sampleIntervalMs: config.sampleIntervalMs ?? 60000,
