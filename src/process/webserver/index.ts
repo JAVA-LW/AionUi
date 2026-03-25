@@ -137,9 +137,7 @@ function getServerIP(): string | null {
  *
  * @returns 初始凭证（仅首次创建时）/ Initial credentials (only on first creation)
  */
-function resolveBootstrapAdminUsername(
-  systemUser: Awaited<ReturnType<typeof UserRepository.getSystemUser>>
-): string {
+function resolveBootstrapAdminUsername(systemUser: Awaited<ReturnType<typeof UserRepository.getSystemUser>>): string {
   if (!systemUser) {
     return DEFAULT_ADMIN_USERNAME;
   }

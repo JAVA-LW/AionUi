@@ -31,7 +31,9 @@ class ConversationManageWithDB {
   private releaseTimer?: NodeJS.Timeout;
 
   constructor(private conversation_id: string) {
-    this.savePromise = this.dbPromise.then((db) => ensureConversationExists(db, this.conversation_id)).catch((): void => {});
+    this.savePromise = this.dbPromise
+      .then((db) => ensureConversationExists(db, this.conversation_id))
+      .catch((): void => {});
   }
 
   static get(conversation_id: string) {
