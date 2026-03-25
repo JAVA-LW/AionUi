@@ -13,7 +13,7 @@ const insertMessage = vi.fn();
 const updateMessage = vi.fn();
 
 vi.mock('@process/services/database/export', () => ({
-  getDatabase: vi.fn(() => ({
+  getDatabase: vi.fn(async () => ({
     getConversation,
     createConversation,
     getConversationMessages,

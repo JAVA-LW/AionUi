@@ -12,6 +12,43 @@ const getTask = vi.fn(() => undefined);
 const getConversationRuntimeTask = vi.fn(() => ({ task: undefined }));
 const isProcessing = vi.fn(() => false);
 const getLastActiveAt = vi.fn(() => undefined);
+const buildDatabaseMock = () => ({
+  getConversation: vi.fn(() => ({
+    success: true,
+    data: {
+      id: 'session-1',
+      type: 'gemini',
+      status: 'finished',
+      extra: {
+        workspace: 'E:/workspace',
+      },
+      model: {
+        platform: 'openai',
+        name: 'OpenAI',
+        useModel: 'gpt-4o-mini',
+      },
+    },
+  })),
+  getConversationMessages: vi.fn(() => ({
+    data: [
+      flushed
+        ? {
+            id: 'assistant-1',
+            type: 'text',
+            position: 'left',
+            content: { content: 'done' },
+            createdAt: 1,
+          }
+        : {
+            id: 'user-1',
+            type: 'text',
+            position: 'right',
+            content: { content: 'hello' },
+            createdAt: 0,
+          },
+    ],
+  })),
+});
 
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -47,43 +84,8 @@ vi.mock('@process/services/cron/CronBusyGuard', () => ({
 }));
 
 vi.mock('@process/services/database', () => ({
-  getDatabase: () => ({
-    getConversation: vi.fn(() => ({
-      success: true,
-      data: {
-        id: 'session-1',
-        type: 'gemini',
-        status: 'finished',
-        extra: {
-          workspace: 'E:/workspace',
-        },
-        model: {
-          platform: 'openai',
-          name: 'OpenAI',
-          useModel: 'gpt-4o-mini',
-        },
-      },
-    })),
-    getConversationMessages: vi.fn(() => ({
-      data: [
-        flushed
-          ? {
-              id: 'assistant-1',
-              type: 'text',
-              position: 'left',
-              content: { content: 'done' },
-              createdAt: 1,
-            }
-          : {
-              id: 'user-1',
-              type: 'text',
-              position: 'right',
-              content: { content: 'hello' },
-              createdAt: 0,
-            },
-      ],
-    })),
-  }),
+  getDatabase: async () => buildDatabaseMock(),
+  getDatabaseSync: () => buildDatabaseMock(),
 }));
 
 describe('ConversationTurnCompletionService', () => {

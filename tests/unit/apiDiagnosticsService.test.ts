@@ -10,6 +10,10 @@ import os from 'os';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const getReadOnlyConversationStatusSnapshot = vi.fn(() => null);
+const getUserConversationsMock = vi.fn(() => ({
+  total: 0,
+  data: [],
+}));
 
 vi.mock('@process/WorkerManage', () => ({
   default: {
@@ -50,10 +54,11 @@ vi.mock('@process/utils/message', () => ({
 }));
 
 vi.mock('@process/services/database', () => ({
-  getDatabase: vi.fn(() => ({
-    getUserConversations: vi.fn(() => ({
-      total: 0,
-    })),
+  getDatabase: vi.fn(async () => ({
+    getUserConversations: getUserConversationsMock,
+  })),
+  getDatabaseSync: vi.fn(() => ({
+    getUserConversations: getUserConversationsMock,
   })),
 }));
 
@@ -61,6 +66,11 @@ describe('ApiDiagnosticsService', () => {
   beforeEach(() => {
     getReadOnlyConversationStatusSnapshot.mockReset();
     getReadOnlyConversationStatusSnapshot.mockReturnValue(null);
+    getUserConversationsMock.mockReset();
+    getUserConversationsMock.mockReturnValue({
+      total: 0,
+      data: [],
+    });
   });
 
   it('applies runtime config updates and normalizes values', async () => {
