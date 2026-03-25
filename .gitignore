@@ -195,9 +195,10 @@ lint-results.txt
 .aionui/diagnostics/api-diagnostics-config.json
 # Local runtime error logs
 .aionui/error/
+# Packaged Bun runtime is generated during build and should never be committed
+resources/bundled-bun/
 # Superpowers brainstorm tool (runtime files, session data)
 .superpowers/
-resources/bundled-bun
 
 # Server build output
 dist-server/

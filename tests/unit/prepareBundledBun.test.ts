@@ -12,6 +12,7 @@ function getRequiredRuntimeFileName(): string {
 describe('prepareBundledBun', () => {
   const projectRoot = path.resolve(__dirname, '../..');
   const runtimeKey = `${process.platform}-${process.arch}`;
+  const bundledRootDir = path.join(projectRoot, 'resources', 'bundled-bun');
   const targetDir = path.join(projectRoot, 'resources', 'bundled-bun', runtimeKey);
 
   const originalCacheDir = process.env.AIONUI_BUN_CACHE_DIR;
@@ -105,5 +106,55 @@ describe('prepareBundledBun', () => {
     expect(manifest.files).toContain(runtimeFileName);
     expect(manifest.cacheDir).toBe(cacheRuntimeDir);
     expect(manifest.cacheMeta?.sourceType).toBe('download');
+  });
+
+  it('removes stale runtime directories before preparing the current runtime', () => {
+    tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'aionui-bun-test-'));
+
+    targetExisted = fs.existsSync(targetDir);
+    if (targetExisted) {
+      targetBackupDir = path.join(tempRoot, 'target-backup');
+      fs.cpSync(targetDir, targetBackupDir, { recursive: true });
+    }
+
+    const staleRuntimeDir = path.join(bundledRootDir, 'stale-platform');
+    fs.mkdirSync(staleRuntimeDir, { recursive: true });
+    fs.writeFileSync(path.join(staleRuntimeDir, 'manifest.json'), '{"files":["missing"]}', 'utf8');
+
+    const cacheRoot = path.join(tempRoot, 'cache-root');
+    const version = 'test-cleanup-version';
+    const cacheRuntimeDir = path.join(cacheRoot, version, runtimeKey);
+    fs.mkdirSync(cacheRuntimeDir, { recursive: true });
+
+    const runtimeFileName = getRequiredRuntimeFileName();
+    fs.writeFileSync(path.join(cacheRuntimeDir, runtimeFileName), 'fake-bun-binary', 'utf8');
+    fs.writeFileSync(
+      path.join(cacheRuntimeDir, 'runtime-meta.json'),
+      JSON.stringify(
+        {
+          platform: process.platform,
+          arch: process.arch,
+          version,
+          sourceType: 'download',
+          source: {
+            url: 'https://example.com/bun.zip',
+            asset: 'bun-test.zip',
+          },
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+
+    process.env.AIONUI_BUN_CACHE_DIR = cacheRoot;
+    process.env.AIONUI_BUN_VERSION = version;
+
+    const result = prepareBundledBun();
+
+    expect(result.prepared).toBe(true);
+    expect(fs.existsSync(staleRuntimeDir)).toBe(false);
+    expect(fs.existsSync(path.join(targetDir, runtimeFileName))).toBe(true);
   });
 });
