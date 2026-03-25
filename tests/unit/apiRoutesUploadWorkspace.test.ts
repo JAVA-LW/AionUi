@@ -10,6 +10,7 @@ import { getDatabase } from '@process/services/database';
 
 vi.mock('@process/services/database', () => ({
   getDatabase: vi.fn(),
+  getDatabaseSync: vi.fn(),
 }));
 
 vi.mock('@process/initStorage', () => ({

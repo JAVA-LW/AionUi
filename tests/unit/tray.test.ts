@@ -20,9 +20,11 @@ const mockMenuInstance = { items: [] };
 const mockBuildFromTemplate = vi.fn(() => mockMenuInstance);
 const mockListTasks = vi.fn(() => []);
 const mockGetUserConversations = vi.fn(() => ({ data: [] }));
-const mockGetDatabase = vi.fn(() => ({
+const buildDatabaseMock = () => ({
   getUserConversations: mockGetUserConversations,
-}));
+});
+const mockGetDatabase = vi.fn(() => Promise.resolve(buildDatabaseMock()));
+const mockGetDatabaseSync = vi.fn(() => buildDatabaseMock());
 
 const mockNativeImage = {
   resize: vi.fn().mockReturnThis(),
@@ -95,6 +97,7 @@ const mockModules = () => {
 
   vi.doMock('@process/services/database', () => ({
     getDatabase: mockGetDatabase,
+    getDatabaseSync: mockGetDatabaseSync,
   }));
 };
 

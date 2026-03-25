@@ -35,6 +35,11 @@ const dbGetUserConversations = vi.fn(() => ({ data: [] }));
 const dbGetUserConversationsByStatuses = vi.fn(() => ({ success: true, data: [] }));
 const dbGetConversation = vi.fn(() => ({ success: false, data: undefined }));
 const cronBusyGuardGetAllStates = vi.fn(() => new Map());
+const buildDatabaseMock = () => ({
+  getUserConversations: dbGetUserConversations,
+  getUserConversationsByStatuses: dbGetUserConversationsByStatuses,
+  getConversation: dbGetConversation,
+});
 
 vi.mock('../../src/process/webserver/middleware/apiAuthMiddleware', () => ({
   validateApiToken: (_req: unknown, _res: unknown, next: () => void) => next(),
@@ -66,11 +71,8 @@ vi.mock('@process/task/workerTaskManagerSingleton', () => ({
 }));
 
 vi.mock('@process/services/database', () => ({
-  getDatabase: vi.fn(() => ({
-    getUserConversations: dbGetUserConversations,
-    getUserConversationsByStatuses: dbGetUserConversationsByStatuses,
-    getConversation: dbGetConversation,
-  })),
+  getDatabase: vi.fn(() => Promise.resolve(buildDatabaseMock())),
+  getDatabaseSync: vi.fn(() => buildDatabaseMock()),
 }));
 
 vi.mock('@process/services/cron/CronBusyGuard', () => ({

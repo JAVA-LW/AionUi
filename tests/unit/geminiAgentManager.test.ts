@@ -11,6 +11,10 @@ const getConversationMessages = vi.fn();
 const notifyPotentialCompletion = vi.fn();
 const hasCronCommands = vi.fn(() => false);
 const extractTextFromMessage = vi.fn(() => 'done');
+const buildDatabaseMock = () => ({
+  getConversationMessages,
+  updateConversation: vi.fn(),
+});
 
 vi.mock('@process/channels/agent/ChannelEventBus', () => ({
   channelEventBus: {
@@ -91,10 +95,8 @@ vi.mock('../../src/process/task/AcpSkillManager', () => ({
 }));
 
 vi.mock('@process/services/database', () => ({
-  getDatabase: vi.fn(() => ({
-    getConversationMessages,
-    updateConversation: vi.fn(),
-  })),
+  getDatabase: vi.fn(() => Promise.resolve(buildDatabaseMock())),
+  getDatabaseSync: vi.fn(() => buildDatabaseMock()),
 }));
 
 vi.mock('@process/utils/message', () => ({

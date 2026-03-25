@@ -23,6 +23,11 @@ function makeChannel(name: string) {
 const getApiConfig = vi.fn(() => ({ success: true, data: null }));
 const updateApiEnabled = vi.fn(() => ({ success: true }));
 const saveApiConfig = vi.fn(() => ({ success: true }));
+const buildDatabaseMock = () => ({
+  getApiConfig,
+  updateApiEnabled,
+  saveApiConfig,
+});
 
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -46,11 +51,8 @@ vi.mock('@process/bridge/migrationUtils', () => ({
 }));
 
 vi.mock('@process/services/database', () => ({
-  getDatabase: vi.fn(() => ({
-    getApiConfig,
-    updateApiEnabled,
-    saveApiConfig,
-  })),
+  getDatabase: vi.fn(() => Promise.resolve(buildDatabaseMock())),
+  getDatabaseSync: vi.fn(() => buildDatabaseMock()),
 }));
 
 import { initDatabaseBridge } from '../../src/process/bridge/databaseBridge';

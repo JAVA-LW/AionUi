@@ -44,7 +44,12 @@ const registerMocks = () => {
   }));
 
   vi.doMock('@process/services/database', () => ({
-    getDatabase: vi.fn(() => ({
+    getDatabase: vi.fn(() =>
+      Promise.resolve({
+        getUserConversations: vi.fn(() => ({ data: [] })),
+      })
+    ),
+    getDatabaseSync: vi.fn(() => ({
       getUserConversations: vi.fn(() => ({ data: [] })),
     })),
   }));

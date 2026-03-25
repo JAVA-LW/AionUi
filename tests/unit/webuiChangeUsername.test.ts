@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // AuthService.validateUsername  (pure string validation, no DB involved)
@@ -15,7 +15,8 @@ describe('AuthService.validateUsername', () => {
     vi.resetModules();
     // Break the DB import chain triggered by UserRepository
     vi.doMock('@process/services/database/export', () => ({
-      getDatabase: vi.fn(() => ({})),
+      getDatabase: vi.fn(() => Promise.resolve({})),
+      getDatabaseSync: vi.fn(() => ({})),
     }));
   });
 
@@ -75,6 +76,9 @@ describe('UserRepository.updateUsername', () => {
           updateUserUsername: vi.fn(() => ({ success: true, data: true })),
         })
       ),
+      getDatabaseSync: vi.fn(() => ({
+        updateUserUsername: vi.fn(() => ({ success: true, data: true })),
+      })),
     }));
 
     const { UserRepository } = await import('@process/webserver/auth/repository/UserRepository');
@@ -92,6 +96,13 @@ describe('UserRepository.updateUsername', () => {
           })),
         })
       ),
+      getDatabaseSync: vi.fn(() => ({
+        updateUserUsername: vi.fn(() => ({
+          success: false,
+          error: 'UNIQUE constraint failed',
+          data: false,
+        })),
+      })),
     }));
 
     const { UserRepository } = await import('@process/webserver/auth/repository/UserRepository');
@@ -102,6 +113,7 @@ describe('UserRepository.updateUsername', () => {
     const updateUserUsernameMock = vi.fn(() => ({ success: true, data: true }));
     vi.doMock('@process/services/database/export', () => ({
       getDatabase: vi.fn(() => Promise.resolve({ updateUserUsername: updateUserUsernameMock })),
+      getDatabaseSync: vi.fn(() => ({ updateUserUsername: updateUserUsernameMock })),
     }));
 
     const { UserRepository } = await import('@process/webserver/auth/repository/UserRepository');
@@ -237,4 +249,11 @@ describe('WebuiService.changeUsername', () => {
     expect(updateUsernameMock).toHaveBeenCalledWith('system_default_user', 'newname');
     expect(invalidateAllTokensMock).toHaveBeenCalledOnce();
   });
+});
+
+afterEach(() => {
+  vi.doUnmock('@process/services/database/export');
+  vi.doUnmock('@process/webserver/auth/repository/UserRepository');
+  vi.doUnmock('@process/webserver/auth/service/AuthService');
+  vi.doUnmock('@process/webserver/index');
 });

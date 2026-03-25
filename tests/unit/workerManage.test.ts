@@ -19,8 +19,13 @@ vi.mock('@process/utils/initStorage', () => ({
   },
 }));
 
-vi.mock('@process/services/database/export', () => ({
-  getDatabase: vi.fn(() => ({
+vi.mock('@process/services/database', () => ({
+  getDatabase: vi.fn(() =>
+    Promise.resolve({
+      getConversation,
+    })
+  ),
+  getDatabaseSync: vi.fn(() => ({
     getConversation,
   })),
 }));
