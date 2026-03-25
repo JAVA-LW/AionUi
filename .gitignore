@@ -192,6 +192,9 @@ lint-results.txt
 .worktrees/
 .aionui\diagnostics\api
 .aionui/diagnostics/api/
+.aionui/diagnostics/api-diagnostics-config.json
+# Local runtime error logs
+.aionui/error/
 # Superpowers brainstorm tool (runtime files, session data)
 .superpowers/
 resources/bundled-bun
