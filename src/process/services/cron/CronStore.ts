@@ -12,8 +12,8 @@ import type { AcpBackendAll } from '@/common/types/acpTypes';
  */
 export type CronSchedule =
   | { kind: 'at'; atMs: number; description: string }
-  | { kind: 'every'; everyMs: number; description: string }
-  | { kind: 'cron'; expr: string; tz?: string; description: string };
+  | { kind: 'every'; everyMs: number; startAtMs?: number; description: string }
+  | { kind: 'cron'; expr: string; tz?: string; startAtMs?: number; description: string };
 
 /**
  * Cron job definition
@@ -55,6 +55,7 @@ type CronJobRow = {
   schedule_kind: string;
   schedule_value: string;
   schedule_tz: string | null;
+  schedule_start_at: number | null;
   schedule_description: string;
   payload_message: string;
   conversation_id: string;
@@ -94,6 +95,7 @@ function jobToRow(job: CronJob): CronJobRow {
     schedule_kind: kind,
     schedule_value: scheduleValue,
     schedule_tz: kind === 'cron' ? (job.schedule.tz ?? null) : null,
+    schedule_start_at: kind === 'at' ? null : (job.schedule.startAtMs ?? null),
     schedule_description: job.schedule.description,
     payload_message: job.target.payload.text,
     conversation_id: job.metadata.conversationId,
@@ -130,6 +132,7 @@ function rowToJob(row: CronJobRow): CronJob {
       schedule = {
         kind: 'every',
         everyMs: Number(row.schedule_value),
+        startAtMs: row.schedule_start_at ?? undefined,
         description: row.schedule_description,
       };
       break;
@@ -139,6 +142,7 @@ function rowToJob(row: CronJobRow): CronJob {
         kind: 'cron',
         expr: row.schedule_value,
         tz: row.schedule_tz ?? undefined,
+        startAtMs: row.schedule_start_at ?? undefined,
         description: row.schedule_description,
       };
       break;
@@ -189,13 +193,13 @@ class CronStore {
         `
       INSERT INTO cron_jobs (
         id, name, enabled,
-        schedule_kind, schedule_value, schedule_tz, schedule_description,
+        schedule_kind, schedule_value, schedule_tz, schedule_start_at, schedule_description,
         payload_message,
         conversation_id, conversation_title, agent_type, created_by,
         created_at, updated_at,
         next_run_at, last_run_at, last_status, last_error,
         run_count, retry_count, max_retries
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
       .run(
@@ -205,6 +209,7 @@ class CronStore {
         row.schedule_kind,
         row.schedule_value,
         row.schedule_tz,
+        row.schedule_start_at,
         row.schedule_description,
         row.payload_message,
         row.conversation_id,
@@ -260,7 +265,7 @@ class CronStore {
         `
       UPDATE cron_jobs SET
         name = ?, enabled = ?,
-        schedule_kind = ?, schedule_value = ?, schedule_tz = ?, schedule_description = ?,
+        schedule_kind = ?, schedule_value = ?, schedule_tz = ?, schedule_start_at = ?, schedule_description = ?,
         payload_message = ?,
         conversation_id = ?, conversation_title = ?, agent_type = ?,
         updated_at = ?,
@@ -275,6 +280,7 @@ class CronStore {
         row.schedule_kind,
         row.schedule_value,
         row.schedule_tz,
+        row.schedule_start_at,
         row.schedule_description,
         row.payload_message,
         row.conversation_id,

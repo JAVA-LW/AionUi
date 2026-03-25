@@ -55,6 +55,37 @@ function makeRepo(overrides?: Partial<ICronRepository>): ICronRepository {
   };
 }
 
+function makeStatefulRepo(initialJob: CronJob): { repo: ICronRepository; read: () => CronJob } {
+  let storedJob = initialJob;
+
+  return {
+    repo: makeRepo({
+      getById: vi.fn((jobId: string) => (jobId === storedJob.id ? storedJob : null)),
+      update: vi.fn((jobId: string, updates: Partial<CronJob>) => {
+        if (jobId !== storedJob.id) {
+          return;
+        }
+
+        storedJob = {
+          ...storedJob,
+          ...updates,
+          schedule: updates.schedule ?? storedJob.schedule,
+          target: updates.target ?? storedJob.target,
+          metadata: {
+            ...storedJob.metadata,
+            ...updates.metadata,
+          },
+          state: {
+            ...storedJob.state,
+            ...updates.state,
+          },
+        };
+      }),
+    }),
+    read: () => storedJob,
+  };
+}
+
 function makeEmitter(overrides?: Partial<ICronEventEmitter>): ICronEventEmitter {
   return {
     emitJobCreated: vi.fn(),
@@ -280,6 +311,38 @@ describe('CronService', () => {
     );
   });
 
+  it('runJobNow preserves nextRunAtMs while updating execution state', async () => {
+    vi.setSystemTime(new Date('2026-03-25T08:00:00Z'));
+
+    const initialNextRunAtMs = Date.now() + 60000;
+    const statefulRepo = makeStatefulRepo(
+      makeJob({
+        state: {
+          runCount: 0,
+          retryCount: 0,
+          maxRetries: 3,
+          nextRunAtMs: initialNextRunAtMs,
+        },
+      })
+    );
+
+    repo = statefulRepo.repo;
+    emitter = makeEmitter();
+    executor = makeExecutor({ executeJob: vi.fn(async () => {}) });
+    conversationRepo = makeConversationRepo();
+    service = new CronService(repo, emitter, executor, conversationRepo);
+
+    const updated = await service.runJobNow('job-1');
+    const storedJob = statefulRepo.read();
+
+    expect(executor.executeJob).toHaveBeenCalledWith(expect.objectContaining({ id: 'job-1' }), expect.any(Function));
+    expect(storedJob.state.nextRunAtMs).toBe(initialNextRunAtMs);
+    expect(storedJob.state.lastStatus).toBe('ok');
+    expect(storedJob.state.runCount).toBe(1);
+    expect(storedJob.state.lastRunAtMs).toBe(Date.now());
+    expect(updated.state.nextRunAtMs).toBe(initialNextRunAtMs);
+  });
+
   it('executeJob skips and stops retrying when conversation is busy beyond maxRetries', async () => {
     const job = makeJob({
       id: 'j1',
@@ -321,6 +384,38 @@ describe('CronService', () => {
 
     // Executor must not have been called — still waiting for retry
     expect(executor.executeJob).not.toHaveBeenCalled();
+  });
+
+  it('starts every timers from schedule.startAtMs before switching to the fixed interval', async () => {
+    vi.setSystemTime(new Date('2026-03-25T08:00:00Z'));
+
+    const firstRunAtMs = Date.now() + 30000;
+    const job = makeJob({
+      schedule: {
+        kind: 'every',
+        everyMs: 60000,
+        startAtMs: firstRunAtMs,
+        description: 'every minute',
+      },
+    });
+    vi.mocked(repo.listEnabled).mockReturnValue([job]);
+    vi.mocked(repo.getById).mockReturnValue(job);
+    vi.mocked(executor.executeJob).mockResolvedValue(undefined);
+
+    await service.init();
+
+    expect(repo.update).toHaveBeenCalledWith(
+      job.id,
+      expect.objectContaining({
+        state: expect.objectContaining({ nextRunAtMs: firstRunAtMs }),
+      })
+    );
+
+    await vi.advanceTimersByTimeAsync(29000);
+    expect(executor.executeJob).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(executor.executeJob).toHaveBeenCalledTimes(1);
   });
 
   // --- handleSystemResume ---

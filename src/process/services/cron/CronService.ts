@@ -31,6 +31,10 @@ export type CreateCronJobParams = {
   createdBy: 'user' | 'agent';
 };
 
+type ExecuteJobOptions = {
+  preserveNextRunAtMs?: boolean;
+};
+
 /**
  * CronService - Core scheduling service for AionUI
  *
@@ -242,6 +246,20 @@ export class CronService {
   }
 
   /**
+   * Manually run a cron job without affecting its existing schedule.
+   */
+  async runJobNow(jobId: string): Promise<CronJob> {
+    const job = await this.repo.getById(jobId);
+    if (!job) {
+      throw new Error(`Job not found: ${jobId}`);
+    }
+
+    await this.executeJob(job, { preserveNextRunAtMs: true });
+
+    return (await this.repo.getById(jobId)) ?? job;
+  }
+
+  /**
    * Start timer for a job
    * Supports cron expressions, fixed intervals (every), and one-time tasks (at)
    */
@@ -257,6 +275,7 @@ export class CronService {
           schedule.expr,
           {
             timezone: schedule.tz,
+            startAt: schedule.startAtMs ? this.formatCronStartAt(schedule.startAtMs) : undefined,
             paused: false,
           },
           () => {
@@ -274,13 +293,20 @@ export class CronService {
       }
 
       case 'every': {
-        const timer = setInterval(() => {
+        const nextRunAtMs = this.getNextEveryRunAtMs(schedule);
+        const delay = Math.max(0, nextRunAtMs - Date.now());
+        const timer = setTimeout(() => {
           void this.executeJob(job);
-        }, schedule.everyMs);
+
+          const intervalTimer = setInterval(() => {
+            void this.executeJob(job);
+          }, schedule.everyMs);
+          this.timers.set(job.id, intervalTimer);
+        }, delay);
         this.timers.set(job.id, timer);
 
         // Sync nextRunAtMs with actual timer start time and notify frontend
-        job.state.nextRunAtMs = Date.now() + schedule.everyMs;
+        job.state.nextRunAtMs = nextRunAtMs;
         await this.repo.update(job.id, { state: job.state });
         this.emitter.emitJobUpdated(job);
         break;
@@ -345,8 +371,9 @@ export class CronService {
    * Execute a job - send message to conversation
    * Handles conversation busy state with retries and power management
    */
-  private async executeJob(job: CronJob): Promise<void> {
+  private async executeJob(job: CronJob, options: ExecuteJobOptions = {}): Promise<void> {
     const { conversationId } = job.metadata;
+    const preservedNextRunAtMs = options.preserveNextRunAtMs ? job.state.nextRunAtMs : undefined;
 
     // Check if conversation is busy
     const isBusy = this.executor.isConversationBusy(conversationId);
@@ -357,7 +384,11 @@ export class CronService {
       if (currentRetry > (job.state.maxRetries || 3)) {
         // Max retries exceeded, skip this run
         this.retryCounts.delete(job.id);
-        this.updateNextRunTime(job);
+        if (options.preserveNextRunAtMs) {
+          job.state.nextRunAtMs = preservedNextRunAtMs;
+        } else {
+          this.updateNextRunTime(job);
+        }
         await this.repo.update(job.id, {
           state: {
             ...job.state,
@@ -377,7 +408,7 @@ export class CronService {
       // Schedule retry in 30 seconds
       const retryTimer = setTimeout(() => {
         this.retryTimers.delete(job.id);
-        void this.executeJob(job);
+        void this.executeJob(job, options);
       }, 30000);
       this.retryTimers.set(job.id, retryTimer);
       return;
@@ -417,7 +448,11 @@ export class CronService {
     }
 
     // Update next run time
-    this.updateNextRunTime(job);
+    if (options.preserveNextRunAtMs) {
+      job.state.nextRunAtMs = preservedNextRunAtMs;
+    } else {
+      this.updateNextRunTime(job);
+    }
 
     // Persist state as new object and notify frontend
     await this.repo.update(job.id, {
@@ -469,7 +504,10 @@ export class CronService {
     switch (schedule.kind) {
       case 'cron': {
         try {
-          const cron = new Cron(schedule.expr, { timezone: schedule.tz });
+          const cron = new Cron(schedule.expr, {
+            timezone: schedule.tz,
+            startAt: schedule.startAtMs ? this.formatCronStartAt(schedule.startAtMs) : undefined,
+          });
           const next = cron.nextRun();
           job.state.nextRunAtMs = next ? next.getTime() : undefined;
         } catch {
@@ -479,7 +517,7 @@ export class CronService {
       }
 
       case 'every': {
-        job.state.nextRunAtMs = Date.now() + schedule.everyMs;
+        job.state.nextRunAtMs = this.getNextEveryRunAtMs(schedule);
         break;
       }
 
@@ -616,6 +654,29 @@ export class CronService {
       }
       this.powerSaveBlockerId = null;
     }
+  }
+
+  private formatCronStartAt(startAtMs: number): string {
+    const date = new Date(startAtMs);
+    const pad = (value: number) => String(value).padStart(2, '0');
+
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  }
+
+  private getNextEveryRunAtMs(schedule: Extract<CronSchedule, { kind: 'every' }>): number {
+    const now = Date.now();
+    const anchor = schedule.startAtMs;
+
+    if (!anchor) {
+      return now + schedule.everyMs;
+    }
+
+    let nextRunAtMs = anchor;
+    while (nextRunAtMs <= now) {
+      nextRunAtMs += schedule.everyMs;
+    }
+
+    return nextRunAtMs;
   }
 }
 

@@ -215,6 +215,7 @@
   "lightMode": "淺色",
   "darkMode": "深色",
   "agent": "代理",
+  "cron": "定時任務",
   "tools": "工具",
   "webui": "遠端連線",
   "installed": "已安裝",

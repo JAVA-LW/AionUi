@@ -215,6 +215,7 @@
   "lightMode": "Light",
   "darkMode": "Dark",
   "agent": "Agent",
+  "cron": "Scheduled Tasks",
   "tools": "Tools",
   "webui": "Remote",
   "installed": "Installed",

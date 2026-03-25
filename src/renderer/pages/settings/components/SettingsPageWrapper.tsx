@@ -5,6 +5,7 @@ import { SettingsViewModeProvider } from '@/renderer/components/settings/Setting
 import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import { extensions as extensionsIpc, type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import {
+  AlarmClock,
   Communication,
   Computer,
   Earth,
@@ -50,6 +51,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
 
   const menuItems = React.useMemo(() => {
     const builtins: NavItem[] = [
+      { id: 'cron', label: t('settings.cron'), icon: <AlarmClock theme='outline' size='16' />, path: 'cron' },
       { id: 'gemini', label: t('settings.gemini'), icon: <Gemini theme='outline' size='16' />, path: 'gemini' },
       { id: 'model', label: t('settings.model'), icon: <LinkCloud theme='outline' size='16' />, path: 'model' },
       {

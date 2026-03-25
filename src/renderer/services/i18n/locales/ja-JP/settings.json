@@ -215,6 +215,7 @@
   "lightMode": "ライト",
   "darkMode": "ダーク",
   "agent": "エージェント",
+  "cron": "定期タスク",
   "tools": "ツール",
   "webui": "リモート接続",
   "installed": "インストール済み",

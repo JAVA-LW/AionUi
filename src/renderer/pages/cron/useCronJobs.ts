@@ -16,6 +16,7 @@ interface CronJobActionsResult {
   pauseJob: (jobId: string) => Promise<void>;
   resumeJob: (jobId: string) => Promise<void>;
   deleteJob: (jobId: string) => Promise<void>;
+  runJobNow: (jobId: string) => Promise<ICronJob>;
   updateJob: (jobId: string, updates: Partial<ICronJob>) => Promise<ICronJob>;
 }
 
@@ -50,6 +51,15 @@ function useCronJobActions(
     [onJobDeleted]
   );
 
+  const runJobNow = useCallback(
+    async (jobId: string) => {
+      const updated = await ipcBridge.cron.runJobNow.invoke({ jobId });
+      onJobUpdated?.(jobId, updated);
+      return updated;
+    },
+    [onJobUpdated]
+  );
+
   const updateJob = useCallback(
     async (jobId: string, updates: Partial<ICronJob>) => {
       const updated = await ipcBridge.cron.updateJob.invoke({ jobId, updates });
@@ -59,7 +69,7 @@ function useCronJobActions(
     [onJobUpdated]
   );
 
-  return { pauseJob, resumeJob, deleteJob, updateJob };
+  return { pauseJob, resumeJob, deleteJob, runJobNow, updateJob };
 }
 
 /**
