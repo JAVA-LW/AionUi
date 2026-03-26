@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { generateQRLoginUrlDirect, verifyQRTokenDirect } from '@process/bridge/webuiQR';
 
 vi.mock('@process/webserver/auth/service/AuthService', () => ({
   AuthService: {
@@ -8,11 +9,17 @@ vi.mock('@process/webserver/auth/service/AuthService', () => ({
 
 vi.mock('@process/webserver/auth/repository/UserRepository', () => ({
   UserRepository: {
-    getSystemUser: vi.fn(async () => ({
+    getSystemUser: vi.fn().mockResolvedValue({
       id: 'system-user',
       username: 'admin',
-    })),
-    updateLastLogin: vi.fn(async () => undefined),
+      password_hash: 'hash',
+      jwt_secret: 'test-jwt-secret-for-unit-tests-only-not-for-production',
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      last_login: null,
+    }),
+    updateLastLogin: vi.fn().mockResolvedValue(undefined),
+    updateJwtSecret: vi.fn().mockResolvedValue(undefined),
   },
 }));
 
@@ -21,8 +28,6 @@ vi.mock('@process/bridge/services/WebuiService', () => ({
     getLanIP: vi.fn(() => '192.168.1.10'),
   },
 }));
-
-import { generateQRLoginUrlDirect, verifyQRTokenDirect } from '@process/bridge/webuiQR';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -36,7 +41,6 @@ describe('generateQRLoginUrlDirect', () => {
   });
 
   it('uses LAN IP when allowRemote=true and LAN IP available', () => {
-    // getLanIP may return null in CI — just verify the shape is correct
     const result = generateQRLoginUrlDirect(3000, true);
     expect(result.qrUrl).toMatch(/\/qr-login\?token=/);
   });

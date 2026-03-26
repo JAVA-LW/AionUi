@@ -46,10 +46,11 @@ export const conversation = {
   remove: bridge.buildProvider<boolean, { id: string }>('remove-conversation'), // 删除对话
   update: bridge.buildProvider<boolean, { id: string; updates: Partial<TChatConversation>; mergeExtra?: boolean }>(
     'update-conversation'
-  ), // 更新对话信息
-  reset: bridge.buildProvider<void, IResetConversationParams>('reset-conversation'), // 重置对话
-  stop: bridge.buildProvider<IBridgeResponse<Record<string, never>>, { conversation_id: string }>('chat.stop.stream'), // 停止会话
-  sendMessage: bridge.buildProvider<IBridgeResponse<Record<string, never>>, ISendMessageParams>('chat.send.message'), // 发送消息（统一接口）
+  ),
+  reset: bridge.buildProvider<void, IResetConversationParams>('reset-conversation'),
+  warmup: bridge.buildProvider<void, { conversation_id: string }>('conversation.warmup'),
+  stop: bridge.buildProvider<IBridgeResponse<Record<string, never>>, { conversation_id: string }>('chat.stop.stream'),
+  sendMessage: bridge.buildProvider<IBridgeResponse<Record<string, never>>, ISendMessageParams>('chat.send.message'),
   getSlashCommands: bridge.buildProvider<
     IBridgeResponse<{ commands: SlashCommandItem[] }>,
     { conversation_id: string }

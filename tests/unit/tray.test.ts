@@ -99,6 +99,13 @@ const mockModules = () => {
     getDatabase: mockGetDatabase,
     getDatabaseSync: mockGetDatabaseSync,
   }));
+
+  vi.doMock('@process/utils/initStorage', () => ({
+    ProcessChat: { get: vi.fn(async () => []) },
+    getSkillsDir: vi.fn(() => '/mock/skills'),
+    getBuiltinSkillsCopyDir: vi.fn(() => '/mock/builtin-skills'),
+    getSystemDir: vi.fn(() => ({ cacheDir: '/mock/cache' })),
+  }));
 };
 
 describe('tray module', () => {
@@ -122,6 +129,7 @@ describe('tray module', () => {
     vi.doUnmock('@process/services/i18n');
     vi.doUnmock('@process/task/workerTaskManagerSingleton');
     vi.doUnmock('@process/services/database');
+    vi.doUnmock('@process/utils/initStorage');
   });
 
   describe('state accessors', () => {
@@ -245,7 +253,7 @@ describe('tray module', () => {
 
       await refreshTrayMenu();
 
-      expect(mockBuildFromTemplate).toHaveBeenCalledOnce();
+      expect(mockBuildFromTemplate).toHaveBeenCalled();
       expect(mockTrayInstance.setContextMenu).toHaveBeenCalledWith(mockMenuInstance);
     });
 

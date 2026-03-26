@@ -49,10 +49,12 @@ export interface IConfigStorageRefer {
       /** Preferred session mode for new conversations / 新会话的默认模式 */
       preferredMode?: string;
       /** Preferred model ID for new conversations / 新会话的默认模型 */
-      preferredModelId?: string;
       preferredConfigOptions?: Record<string, string>;
+      promptTimeout?: number;
     };
   };
+  /** Global LLM prompt timeout in seconds (default: 300). Per-backend promptTimeout overrides this. */
+  'acp.promptTimeout'?: number;
   'acp.customAgents'?: AcpBackendConfig[];
   // Cached model lists per ACP backend for Guid page pre-selection
   'acp.cachedModels'?: Record<string, import('@/common/types/acpTypes').AcpModelInfo>;
@@ -132,6 +134,15 @@ export interface IConfigStorageRefer {
     customAgentId?: string;
     name?: string;
   };
+  'assistant.weixin.defaultModel'?: {
+    id: string;
+    useModel: string;
+  };
+  'assistant.weixin.agent'?: {
+    backend: AcpBackendAll;
+    customAgentId?: string;
+    name?: string;
+  };
   'api.config'?: IApiConfig;
   // Skills Market: whether the aionui-skills builtin skill is enabled
   'skillsMarket.enabled'?: boolean;
@@ -163,7 +174,7 @@ export interface IEnvStorageRefer {
  * Conversation source type - identifies where the conversation was created
  * 会话来源类型 - 标识会话创建的来源
  */
-export type ConversationSource = 'aionui' | 'telegram' | 'lark' | 'dingtalk' | (string & {});
+export type ConversationSource = 'aionui' | 'telegram' | 'lark' | 'dingtalk' | 'weixin' | (string & {});
 
 interface IChatConversation<T, Extra> {
   createTime: number;
@@ -425,7 +436,9 @@ export interface IProvider {
   >;
 }
 
-export type TProviderWithModel = Omit<IProvider, 'model'> & { useModel: string };
+export type TProviderWithModel = Omit<IProvider, 'model'> & {
+  useModel: string;
+};
 
 // MCP Server Configuration Types
 export type McpTransportType = 'stdio' | 'sse' | 'http';

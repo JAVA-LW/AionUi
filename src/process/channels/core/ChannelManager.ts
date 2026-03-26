@@ -14,6 +14,7 @@ import { PairingService } from '../pairing/PairingService';
 import { DingTalkPlugin } from '../plugins/dingtalk/DingTalkPlugin';
 import { LarkPlugin } from '../plugins/lark/LarkPlugin';
 import { TelegramPlugin } from '../plugins/telegram/TelegramPlugin';
+import { WeixinPlugin } from '../plugins/weixin/WeixinPlugin';
 import { isBuiltinChannelPlatform, resolveChannelConvType } from '../types';
 import type { ChannelPlatform, IChannelPluginConfig, PluginType } from '../types';
 import { ChannelServiceRegistry, type IChannelMessageServiceContract } from './ChannelServiceRegistry';
@@ -52,6 +53,7 @@ export class ChannelManager {
     registerPlugin('telegram', TelegramPlugin);
     registerPlugin('lark', LarkPlugin);
     registerPlugin('dingtalk', DingTalkPlugin);
+    registerPlugin('weixin', WeixinPlugin);
   }
 
   /**
@@ -245,7 +247,7 @@ export class ChannelManager {
     }
 
     const enabledPlugins = result.data.filter((p) => p.enabled);
-    const builtinStartableTypes = new Set<PluginType>(['telegram', 'lark', 'dingtalk']);
+    const builtinStartableTypes = new Set<PluginType>(['telegram', 'lark', 'dingtalk', 'weixin']);
     const extensionRegistry = ExtensionRegistry.getInstance();
 
     for (const plugin of enabledPlugins) {
@@ -305,8 +307,9 @@ export class ChannelManager {
     const existingResult = db.getChannelPlugin(pluginId);
     const existing = existingResult.data;
 
-    // Resolve plugin type
-    const pluginType = (existing?.type || this.getPluginTypeFromId(pluginId)) as PluginType;
+    // Resolve plugin type — always derive from pluginId so stale DB records don't cause
+    // "Unknown plugin type" errors after renaming or fixing the type mapping.
+    const pluginType = this.getPluginTypeFromId(pluginId) as PluginType;
     let credentials = existing?.credentials;
     let pluginRuntimeConfig = existing?.config ? { ...existing.config } : {};
 
@@ -329,6 +332,12 @@ export class ChannelManager {
       const clientSecret = config.clientSecret as string | undefined;
       if (clientId && clientSecret) {
         credentials = { clientId, clientSecret };
+      }
+    } else if (pluginType === 'weixin') {
+      const accountId = config.accountId as string | undefined;
+      const botToken = config.botToken as string | undefined;
+      if (accountId && botToken) {
+        credentials = { accountId, botToken };
       }
     } else {
       // Extension or unknown plugin type:
@@ -507,6 +516,7 @@ export class ChannelManager {
     if (pluginId.startsWith('discord')) return 'discord';
     if (pluginId.startsWith('lark')) return 'lark';
     if (pluginId.startsWith('dingtalk')) return 'dingtalk';
+    if (pluginId.startsWith('weixin')) return 'weixin';
     // Extension plugins: use pluginId as type (e.g., 'ext-feishu')
     return pluginId;
   }
@@ -578,7 +588,7 @@ export class ChannelManager {
       // For gemini + model info: update existing conversations' model field
       if (newType === 'gemini' && model?.id && model?.useModel) {
         if (isBuiltinChannelPlatform(platform)) {
-          const builtinPlatform: 'telegram' | 'lark' | 'dingtalk' = platform;
+          const builtinPlatform: 'telegram' | 'lark' | 'dingtalk' | 'weixin' = platform;
           const fullModel = await getChannelDefaultModel(builtinPlatform);
           const db = await getDatabase();
           const result = db.updateChannelConversationModel(builtinPlatform, 'gemini', fullModel);
