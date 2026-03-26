@@ -35,6 +35,16 @@ const dbGetUserConversations = vi.fn(() => ({ data: [] }));
 const dbGetUserConversationsByStatuses = vi.fn(() => ({ success: true, data: [] }));
 const dbGetConversation = vi.fn(() => ({ success: false, data: undefined }));
 const cronBusyGuardGetAllStates = vi.fn(() => new Map());
+const turnCompletionGetDebugState = vi.fn(() => ({
+  emittedKeyCount: 0,
+  inFlightCount: 0,
+  emittedKeys: [],
+  inFlightSessionIds: [],
+}));
+const getConversationMessageCacheStats = vi.fn(() => ({
+  size: 0,
+  conversations: [],
+}));
 const buildDatabaseMock = () => ({
   getUserConversations: dbGetUserConversations,
   getUserConversationsByStatuses: dbGetUserConversationsByStatuses,
@@ -98,6 +108,11 @@ vi.mock('@process/services/ApiDiagnosticsService', () => ({
 }));
 
 vi.mock('@process/services/ConversationTurnCompletionService', () => ({
+  ConversationTurnCompletionService: {
+    getInstance: vi.fn(() => ({
+      getDebugState: turnCompletionGetDebugState,
+    })),
+  },
   getConversationStatusSnapshot: vi.fn(),
   getReadOnlyConversationStatusSnapshot: vi.fn(),
   getConversationStatusCategory: vi.fn((state: string) => {
@@ -119,6 +134,10 @@ vi.mock('@process/services/ConversationTurnCompletionService', () => ({
         }
       : undefined
   ),
+}));
+
+vi.mock('@process/utils/message', () => ({
+  getConversationMessageCacheStats,
 }));
 
 vi.mock('@/common', () => ({
@@ -154,6 +173,18 @@ describe('conversationApiRoutes helpers', () => {
     dbGetConversation.mockReturnValue({ success: false, data: undefined });
     cronBusyGuardGetAllStates.mockReset();
     cronBusyGuardGetAllStates.mockReturnValue(new Map());
+    turnCompletionGetDebugState.mockReset();
+    turnCompletionGetDebugState.mockReturnValue({
+      emittedKeyCount: 0,
+      inFlightCount: 0,
+      emittedKeys: [],
+      inFlightSessionIds: [],
+    });
+    getConversationMessageCacheStats.mockReset();
+    getConversationMessageCacheStats.mockReturnValue({
+      size: 0,
+      conversations: [],
+    });
   });
 
   it('recognizes active snapshots from runtime and non-stopped states', async () => {
@@ -542,7 +573,7 @@ describe('conversationApiRoutes helpers', () => {
     expect(stoppedOnly.map((item) => item.sessionId)).toEqual(['conv-active']);
   });
 
-  it('collects runtime candidate ids without including idle busy-guard entries', async () => {
+  it('collects runtime candidate ids from task, busy, cache, and completion sources', async () => {
     const { collectConversationStatusCandidateIds } =
       await import('../../src/process/webserver/routes/conversationApiRoutes');
 
@@ -551,10 +582,12 @@ describe('conversationApiRoutes helpers', () => {
       new Map([
         ['busy-1', { isProcessing: true }],
         ['idle-1', { isProcessing: false }],
-      ])
+      ]),
+      ['cache-1'],
+      ['turn-1']
     );
 
-    expect(result).toEqual(['task-1', 'task-2', 'busy-1']);
+    expect(result).toEqual(['task-1', 'task-2', 'busy-1', 'cache-1', 'turn-1']);
   });
 
   it('resolves active status list conversations from runtime candidates instead of scanning full history', async () => {

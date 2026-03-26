@@ -19,12 +19,14 @@ import {
 } from '@process/services/ConversationRuntimeService';
 import type { getConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
 import {
+  ConversationTurnCompletionService,
   formatStatusLastMessage,
   getConversationStatusCategory,
   getReadOnlyConversationStatusSnapshot,
   isConversationStatusWorking,
 } from '@process/services/ConversationTurnCompletionService';
 import { apiDiagnosticsService } from '@process/services/ApiDiagnosticsService';
+import { getConversationMessageCacheStats } from '@process/utils/message';
 import type { TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import type {
   ConversationTokenUsageMonitorResult,
@@ -503,13 +505,21 @@ const getDefaultConversationStatusCandidateTasks = (): ConversationStatusCandida
 
 const getDefaultConversationBusyStates = (): ConversationBusyStateMap => cronBusyGuard.getAllStates();
 
+const getDefaultConversationMessageCacheIds = (): string[] =>
+  getConversationMessageCacheStats().conversations.map((conversation) => conversation.conversationId);
+
+const getDefaultConversationTurnCompletionInFlightIds = (): string[] =>
+  ConversationTurnCompletionService.getInstance().getDebugState().inFlightSessionIds;
+
 const getDefaultConversationStatusListDatabase = (): ConversationStatusListDatabase => getDatabaseSync();
 
 const getDefaultConversationStatusCandidateIds = (): string[] => collectConversationStatusCandidateIds();
 
 export function collectConversationStatusCandidateIds(
   tasks = getDefaultConversationStatusCandidateTasks(),
-  busyStates = getDefaultConversationBusyStates()
+  busyStates = getDefaultConversationBusyStates(),
+  messageCacheConversationIds = getDefaultConversationMessageCacheIds(),
+  inFlightSessionIds = getDefaultConversationTurnCompletionInFlightIds()
 ): string[] {
   const sessionIds = new Set<string>();
 
@@ -521,6 +531,14 @@ export function collectConversationStatusCandidateIds(
     if (state.isProcessing) {
       sessionIds.add(sessionId);
     }
+  });
+
+  messageCacheConversationIds.forEach((sessionId) => {
+    sessionIds.add(sessionId);
+  });
+
+  inFlightSessionIds.forEach((sessionId) => {
+    sessionIds.add(sessionId);
   });
 
   return Array.from(sessionIds);

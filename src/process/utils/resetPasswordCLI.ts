@@ -8,13 +8,11 @@
  */
 
 import crypto from 'crypto';
-import type Database from 'better-sqlite3';
-import BetterSqlite3 from 'better-sqlite3';
 import bcrypt from 'bcryptjs';
-import { getDataPath, ensureDirectory } from '@process/utils';
+import { getDataPath } from '@process/utils';
+import { closeDatabase, getDatabase } from '@process/services/database/export';
 import path from 'path';
 
-// 颜色输出 / Color output
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
@@ -26,10 +24,10 @@ const colors = {
 };
 
 const log = {
-  info: (msg: string) => console.log(`${colors.blue}ℹ${colors.reset} ${msg}`),
-  success: (msg: string) => console.log(`${colors.green}✓${colors.reset} ${msg}`),
-  error: (msg: string) => console.log(`${colors.red}✗${colors.reset} ${msg}`),
-  warning: (msg: string) => console.log(`${colors.yellow}⚠${colors.reset} ${msg}`),
+  info: (msg: string) => console.log(`${colors.blue}i${colors.reset} ${msg}`),
+  success: (msg: string) => console.log(`${colors.green}OK${colors.reset} ${msg}`),
+  error: (msg: string) => console.log(`${colors.red}ERR${colors.reset} ${msg}`),
+  warning: (msg: string) => console.log(`${colors.yellow}WARN${colors.reset} ${msg}`),
   highlight: (msg: string) => console.log(`${colors.cyan}${colors.bright}${msg}${colors.reset}`),
 };
 
@@ -44,13 +42,10 @@ const hashPasswordAsync = (password: string, saltRounds: number): Promise<string
     });
   });
 
-// Hash password using bcrypt
-// 使用 bcrypt 哈希密码
 async function hashPassword(password: string): Promise<string> {
   return await hashPasswordAsync(password, 10);
 }
 
-// 生成随机密码 / Generate random password
 function generatePassword(): string {
   const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let password = '';
@@ -70,36 +65,24 @@ export function resolveResetPasswordUsername(argv: string[]): string {
   return argsAfterCommand.find((arg) => !arg.startsWith('--')) || 'admin';
 }
 
-/**
- * Reset password for a user (CLI mode, works in packaged apps)
- * 重置用户密码（CLI模式,在打包应用中可用）
- *
- * @param username - Username to reset password for
- */
 export async function resetPasswordCLI(username: string): Promise<void> {
-  let db: Database.Database | null = null;
-
   try {
     log.info('Starting password reset...');
     log.info(`Target user: ${username}`);
 
-    // Get database path using the same logic as the main app
     const dbPath = path.join(getDataPath(), 'aionui.db');
     log.info(`Database path: ${dbPath}`);
 
-    // Ensure directory exists
-    const dir = path.dirname(dbPath);
-    ensureDirectory(dir);
+    // Reuse the app database abstraction so Bun uses BunSqliteDriver instead
+    // of trying to load better-sqlite3 native bindings.
+    const db = await getDatabase();
+    const hasUsersResult = db.hasUsers();
 
-    // Connect to database
-    db = new BetterSqlite3(dbPath);
+    if (!hasUsersResult.success) {
+      throw new Error(hasUsersResult.error || 'Failed to check database users');
+    }
 
-    // Check if users table exists
-    const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get() as
-      | { name: string }
-      | undefined;
-
-    if (!tableExists) {
+    if (!hasUsersResult.data) {
       log.error('Database is not initialized yet');
       log.info('');
       log.info('Please run AionUi at least once to initialize the database:');
@@ -110,51 +93,59 @@ export async function resetPasswordCLI(username: string): Promise<void> {
       process.exit(1);
     }
 
-    // Find user
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as
-      | { id: string; username: string; password_hash: string; jwt_secret: string | null }
-      | undefined;
+    const userResult = db.getUserByUsername(username);
+    if (!userResult.success) {
+      throw new Error(userResult.error || `Failed to query user '${username}'`);
+    }
 
+    const user = userResult.data;
     if (!user) {
       log.error(`User '${username}' not found in database`);
       log.info('');
       log.info('Available users:');
-      const allUsers = db.prepare('SELECT username FROM users').all() as { username: string }[];
+
+      const allUsersResult = db.getAllUsers();
+      if (!allUsersResult.success) {
+        throw new Error(allUsersResult.error || 'Failed to list users');
+      }
+
+      const allUsers = allUsersResult.data;
       if (allUsers.length === 0) {
         log.info('  (no users found)');
       } else {
-        allUsers.forEach((u) => log.info(`  - ${u.username}`));
+        allUsers.forEach((entry) => log.info(`  - ${entry.username}`));
       }
       process.exit(1);
     }
 
     log.info(`Found user: ${user.username} (ID: ${user.id})`);
 
-    // Generate new password
     const newPassword = generatePassword();
     const hashedPassword = await hashPassword(newPassword);
 
-    // Update password
-    const now = Date.now();
-    db.prepare('UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?').run(hashedPassword, now, user.id);
+    const updatePasswordResult = db.updateUserPassword(user.id, hashedPassword);
+    if (!updatePasswordResult.success) {
+      throw new Error(updatePasswordResult.error || 'Failed to update password');
+    }
 
-    // Generate and update JWT Secret
     const newJwtSecret = crypto.randomBytes(64).toString('hex');
-    db.prepare('UPDATE users SET jwt_secret = ?, updated_at = ? WHERE id = ?').run(newJwtSecret, now, user.id);
+    const updateJwtSecretResult = db.updateUserJwtSecret(user.id, newJwtSecret);
+    if (!updateJwtSecretResult.success) {
+      throw new Error(updateJwtSecretResult.error || 'Failed to update JWT secret');
+    }
 
-    // Display result
     console.log('');
     log.success('Password reset successfully!');
     console.log('');
-    log.highlight('═══════════════════════════════════════');
+    log.highlight('========================================');
     log.highlight(`  Username: ${user.username}`);
     log.highlight(`  New Password: ${newPassword}`);
-    log.highlight('═══════════════════════════════════════');
+    log.highlight('========================================');
     console.log('');
-    log.warning('⚠ JWT secret has been rotated');
-    log.warning('⚠ All previous tokens are now invalid');
+    log.warning('JWT secret has been rotated');
+    log.warning('All previous tokens are now invalid');
     console.log('');
-    log.info('💡 Next steps:');
+    log.info('Next steps:');
     log.info('   1. Refresh your browser (Cmd+R or Ctrl+R)');
     log.info('   2. You will be redirected to login page');
     log.info('   3. Login with the new password above');
@@ -165,9 +156,6 @@ export async function resetPasswordCLI(username: string): Promise<void> {
     console.error(error);
     process.exit(1);
   } finally {
-    // Close database connection
-    if (db) {
-      db.close();
-    }
+    closeDatabase();
   }
 }
