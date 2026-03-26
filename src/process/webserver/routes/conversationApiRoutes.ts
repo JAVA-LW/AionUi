@@ -323,32 +323,11 @@ type ConversationUsageSummaryListItem = {
 };
 
 export const isConversationStatusActive = (snapshot: {
-  status: ConversationStatusValue;
-  state: ConversationRuntimeState;
   runtime: {
     hasTask: boolean;
-    taskStatus?: ConversationStatusValue;
-    isProcessing: boolean;
-    pendingConfirmations: number;
   };
 }): boolean => {
-  if (snapshot.runtime.isProcessing || snapshot.runtime.pendingConfirmations > 0) {
-    return true;
-  }
-
-  if (snapshot.runtime.taskStatus === 'running' || snapshot.runtime.taskStatus === 'pending') {
-    return true;
-  }
-
-  if (snapshot.status === 'running' || snapshot.status === 'pending') {
-    return true;
-  }
-
-  return (
-    snapshot.state === 'ai_generating' ||
-    snapshot.state === 'ai_waiting_confirmation' ||
-    snapshot.state === 'initializing'
-  );
+  return snapshot.runtime.hasTask;
 };
 
 export const isConversationStatusGenerating = (snapshot: {

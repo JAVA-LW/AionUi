@@ -596,7 +596,7 @@ export function buildOpenApiSpec(): Record<string, any> {
               required: false,
               schema: { type: 'string', enum: ['generating', 'waiting', 'stopped', 'error', 'active', 'all'] },
               description:
-                'Filter preset. `generating` returns sessions actively working; `waiting` returns sessions waiting for input or confirmation; `stopped` returns explicitly stopped sessions; `error` returns sessions whose last response ended in error; `active` returns runtime-alive sessions; `all` disables preset filtering. When `status` or `state` is provided without `scope`, the API uses `all` so explicit status filters are not pre-filtered away.',
+                'Filter preset. `generating` returns sessions actively working; `waiting` returns sessions waiting for input or confirmation; `stopped` returns explicitly stopped sessions; `error` returns sessions whose last response ended in error; `active` returns sessions whose CLI/runtime task is still attached, even when they are idle and waiting for the next message; `all` disables preset filtering. When `status` or `state` is provided without `scope`, the API uses `all` so explicit status filters are not pre-filtered away.',
             },
             {
               name: 'status',

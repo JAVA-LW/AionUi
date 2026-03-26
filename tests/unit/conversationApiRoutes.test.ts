@@ -187,7 +187,7 @@ describe('conversationApiRoutes helpers', () => {
     });
   });
 
-  it('recognizes active snapshots from runtime and non-stopped states', async () => {
+  it('recognizes active snapshots from attached runtime tasks instead of generating state', async () => {
     const { isConversationStatusActive } = await import('../../src/process/webserver/routes/conversationApiRoutes');
 
     expect(
@@ -201,7 +201,7 @@ describe('conversationApiRoutes helpers', () => {
           pendingConfirmations: 0,
         },
       })
-    ).toBe(false);
+    ).toBe(true);
 
     expect(
       isConversationStatusActive({
@@ -215,6 +215,19 @@ describe('conversationApiRoutes helpers', () => {
         },
       })
     ).toBe(true);
+
+    expect(
+      isConversationStatusActive({
+        status: 'running',
+        state: 'ai_generating',
+        runtime: {
+          hasTask: false,
+          taskStatus: undefined,
+          isProcessing: true,
+          pendingConfirmations: 0,
+        },
+      })
+    ).toBe(false);
 
     expect(
       isConversationStatusActive({
@@ -498,7 +511,7 @@ describe('conversationApiRoutes helpers', () => {
     });
 
     const activeOnly = buildConversationStatusList(conversations as never, { scope: 'active' }, getSnapshot);
-    expect(activeOnly.map((item) => item.sessionId)).toEqual(['conv-other-source', 'conv-running']);
+    expect(activeOnly.map((item) => item.sessionId)).toEqual(['conv-other-source', 'conv-running', 'conv-active']);
 
     const apiGenerating = buildConversationStatusList(
       conversations as never,

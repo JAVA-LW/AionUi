@@ -26,6 +26,11 @@ type CallbackJsFilterResult = {
   textLimit: number;
 };
 
+type CallbackApiJsonResponse = {
+  errcode?: unknown;
+  errmsg?: unknown;
+};
+
 /**
  * Service for sending HTTP callbacks
  * HTTP 回调发送服务
@@ -211,6 +216,55 @@ jsFilter(input);
     return chunks.length > 0 ? chunks : [content];
   }
 
+  private static async validateCallbackResponse(
+    response: Response,
+    chunkIndex: number,
+    chunkCount: number
+  ): Promise<string | null> {
+    if (!response.ok) {
+      return chunkCount > 1
+        ? `HTTP ${response.status}: ${response.statusText} (chunk ${chunkIndex}/${chunkCount})`
+        : `HTTP ${response.status}: ${response.statusText}`;
+    }
+
+    const contentType = response.headers?.get('content-type')?.toLowerCase() ?? '';
+    if (!contentType.includes('application/json')) {
+      return null;
+    }
+
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch {
+      return null;
+    }
+
+    if (!responseText.trim()) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(responseText) as CallbackApiJsonResponse;
+      const errcode =
+        typeof parsed.errcode === 'number'
+          ? parsed.errcode
+          : typeof parsed.errcode === 'string'
+            ? Number(parsed.errcode)
+            : 0;
+
+      if (Number.isFinite(errcode) && errcode !== 0) {
+        const errmsg = typeof parsed.errmsg === 'string' && parsed.errmsg.trim() ? parsed.errmsg.trim() : 'Unknown';
+        return chunkCount > 1
+          ? `Callback API rejected request with errcode ${errcode}: ${errmsg} (chunk ${chunkIndex}/${chunkCount})`
+          : `Callback API rejected request with errcode ${errcode}: ${errmsg}`;
+      }
+    } catch {
+      return null;
+    }
+
+    return null;
+  }
+
   /**
    * Send HTTP callback request
    * 发送 HTTP 回调请求
@@ -250,11 +304,8 @@ jsFilter(input);
           signal: AbortSignal.timeout(30000),
         });
 
-        if (!response.ok) {
-          const errorMsg =
-            chunks.length > 1
-              ? `HTTP ${response.status}: ${response.statusText} (chunk ${index + 1}/${chunks.length})`
-              : `HTTP ${response.status}: ${response.statusText}`;
+        const errorMsg = await this.validateCallbackResponse(response, index + 1, chunks.length);
+        if (errorMsg) {
           console.error(`[CallbackService] Callback failed -`, errorMsg);
           return { success: false, error: errorMsg };
         }
