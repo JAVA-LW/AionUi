@@ -17,7 +17,6 @@ import { setupBasicMiddleware, setupCors, setupErrorHandler } from './setup';
 import { registerAuthRoutes } from './routes/authRoutes';
 import { registerApiRoutes } from './routes/apiRoutes';
 import { registerStaticRoutes } from './routes/staticRoutes';
-import { ApiCallbackManager } from '@process/services/ApiCallbackManager';
 import { generateQRLoginUrlDirect } from '@process/bridge/webuiQR';
 
 // Express Request 类型扩展定义在 src/webserver/types/express.d.ts
@@ -316,7 +315,6 @@ export async function startWebServerWithInstance(port: number, allowRemote = fal
 
       // 初始化 WebSocket 适配器 / Initialize WebSocket adapter
       initWebAdapter(wss);
-      ApiCallbackManager.getInstance();
 
       resolve({
         server,

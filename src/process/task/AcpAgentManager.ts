@@ -14,6 +14,7 @@ import type {
   AcpPermissionOption,
   AcpPermissionRequest,
   AcpPromptResponseUsage,
+  AcpResult,
   AcpSessionConfigOption,
 } from '@/common/types/acpTypes';
 import { ACP_BACKENDS_ALL } from '@/common/types/acpTypes';
@@ -95,6 +96,12 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
   private acpAvailableSlashWaiters: Array<(commands: SlashCommandItem[]) => void> = [];
   private readonly streamDbFlushIntervalMs = 120;
   private readonly bufferedStreamTextMessages = new Map<string, BufferedStreamTextMessage>();
+  private readonly missingFinishFallbackDelayMs = 2000;
+  private missingFinishFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private missingFinishFallbackTurnId: number | null = null;
+  private nextTrackedTurnId: number = 0;
+  private activeTrackedTurnId: number | null = null;
+  private readonly completedTrackedTurnIds = new Set<number>();
 
   constructor(data: AcpAgentManagerData) {
     super('acp', data, new IpcAgentEventEmitter());
@@ -160,6 +167,140 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
     const keys = Array.from(this.bufferedStreamTextMessages.keys());
     for (const key of keys) {
       this.flushBufferedStreamTextMessage(key);
+    }
+  }
+
+  private beginTrackedTurn(): number {
+    this.clearMissingFinishFallback();
+    const turnId = this.nextTrackedTurnId + 1;
+    this.nextTrackedTurnId = turnId;
+    this.activeTrackedTurnId = turnId;
+    return turnId;
+  }
+
+  private markTrackedTurnFinished(turnId: number): void {
+    if (this.activeTrackedTurnId === turnId) {
+      this.activeTrackedTurnId = null;
+    }
+    this.completedTrackedTurnIds.add(turnId);
+  }
+
+  private markActiveTurnFinished(): void {
+    if (this.activeTrackedTurnId !== null) {
+      this.markTrackedTurnFinished(this.activeTrackedTurnId);
+    }
+  }
+
+  private consumeTrackedTurnFinished(turnId: number): boolean {
+    const hasFinished = this.completedTrackedTurnIds.has(turnId);
+    if (hasFinished) {
+      if (this.activeTrackedTurnId === turnId) {
+        this.activeTrackedTurnId = null;
+      }
+      this.completedTrackedTurnIds.delete(turnId);
+    }
+    return hasFinished;
+  }
+
+  private clearTrackedTurn(turnId: number): void {
+    if (this.activeTrackedTurnId === turnId) {
+      this.activeTrackedTurnId = null;
+    }
+    this.completedTrackedTurnIds.delete(turnId);
+  }
+
+  private clearMissingFinishFallback(): void {
+    if (this.missingFinishFallbackTimer) {
+      clearTimeout(this.missingFinishFallbackTimer);
+      this.missingFinishFallbackTimer = null;
+    }
+    this.missingFinishFallbackTurnId = null;
+  }
+
+  private scheduleMissingFinishFallback(): void {
+    const turnId = this.activeTrackedTurnId;
+    if (turnId === null) {
+      return;
+    }
+
+    this.clearMissingFinishFallback();
+    this.missingFinishFallbackTurnId = turnId;
+    this.missingFinishFallbackTimer = setTimeout(() => {
+      void this.handleMissingFinishFallback(turnId);
+    }, this.missingFinishFallbackDelayMs);
+  }
+
+  private async handleMissingFinishFallback(turnId: number): Promise<void> {
+    if (this.missingFinishFallbackTurnId !== turnId) {
+      return;
+    }
+
+    this.clearMissingFinishFallback();
+    if (this.activeTrackedTurnId !== turnId || this.completedTrackedTurnIds.has(turnId)) {
+      return;
+    }
+
+    if (this.getConfirmations().length > 0) {
+      return;
+    }
+
+    this.markTrackedTurnFinished(turnId);
+    mainWarn(
+      '[AcpAgentManager]',
+      `ACP turn became idle without finish signal; synthesizing finish for ${this.conversation_id} (${this.options.backend})`
+    );
+
+    const shouldNotifyTurnCompleted = await this.handleFinishSignal(
+      {
+        type: 'finish',
+        conversation_id: this.conversation_id,
+        msg_id: uuid(),
+        data: null,
+      },
+      this.options.backend,
+      { trackActiveTurn: false }
+    );
+
+    if (shouldNotifyTurnCompleted) {
+      void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
+    }
+  }
+
+  private async sendAgentMessageWithFinishFallback(data: {
+    content: string;
+    files?: string[];
+    msg_id?: string;
+  }): Promise<AcpResult> {
+    const turnId = this.beginTrackedTurn();
+
+    try {
+      const result = await this.agent.sendMessage(data);
+      if (this.consumeTrackedTurnFinished(turnId)) {
+        return result;
+      }
+
+      this.clearTrackedTurn(turnId);
+      mainWarn(
+        '[AcpAgentManager]',
+        `ACP turn resolved without finish signal; synthesizing finish for ${this.conversation_id} (${this.options.backend})`
+      );
+      const shouldNotifyTurnCompleted = await this.handleFinishSignal(
+        {
+          type: 'finish',
+          conversation_id: this.conversation_id,
+          msg_id: data.msg_id || uuid(),
+          data: null,
+        },
+        this.options.backend,
+        { trackActiveTurn: false }
+      );
+      if (shouldNotifyTurnCompleted) {
+        void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
+      }
+      return result;
+    } catch (error) {
+      this.clearTrackedTurn(turnId);
+      throw error;
     }
   }
 
@@ -353,6 +494,9 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           if (contentTypes.includes(message.type)) {
             this.status = 'finished';
           }
+          if (message.type === 'content' || message.type === 'acp_tool_call' || message.type === 'plan') {
+            this.scheduleMissingFinishFallback();
+          }
 
           // Emit request trace on each model generation start
           if (message.type === 'start') {
@@ -450,15 +594,21 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           }
         },
         onSignalEvent: async (v) => {
-          let shouldNotifyTurnCompleted = v.type === 'finish';
-          if (v.type !== 'finish') {
-            cronBusyGuard.touchActivity(this.conversation_id);
+          if (v.type === 'finish') {
+            const shouldNotifyTurnCompleted = await this.handleFinishSignal(v, data.backend);
+            if (shouldNotifyTurnCompleted) {
+              void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
+            }
+            return;
           }
+
+          cronBusyGuard.touchActivity(this.conversation_id);
           // Flush buffered text chunks before handling turn-level signals
           this.flushBufferedStreamTextMessages();
 
           // 仅发送信号到前端，不更新消息列表
           if (v.type === 'acp_permission') {
+            this.clearMissingFinishFallback();
             const { toolCall, options } = v.data as AcpPermissionRequest;
             this.addConfirmation({
               title: toolCall.title || 'messages.permissionRequest',
@@ -483,49 +633,6 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
             return;
           }
 
-          // Clear busy guard when turn ends
-          if (v.type === 'finish') {
-            this.persistCurrentTurnTokenUsage();
-            cronBusyGuard.setProcessing(this.conversation_id, false);
-          }
-
-          // Process cron commands when turn ends (finish signal)
-          // ACP streams content in chunks, so we check the accumulated content here
-          if (v.type === 'finish' && this.currentMsgContent && hasCronCommands(this.currentMsgContent)) {
-            const message: TMessage = {
-              id: this.currentMsgId || uuid(),
-              msg_id: this.currentMsgId || uuid(),
-              type: 'text',
-              position: 'left',
-              conversation_id: this.conversation_id,
-              content: { content: this.currentMsgContent },
-              status: 'finish',
-              createdAt: Date.now(),
-            };
-            // Process cron commands and send results back to AI
-            const collectedResponses: string[] = [];
-            await processCronInMessage(this.conversation_id, data.backend as any, message, (sysMsg) => {
-              collectedResponses.push(sysMsg);
-              // Also emit to frontend for display
-              const systemMessage: IResponseMessage = {
-                type: 'system',
-                conversation_id: this.conversation_id,
-                msg_id: uuid(),
-                data: sysMsg,
-              };
-              ipcBridge.acpConversation.responseStream.emit(systemMessage);
-            });
-            // Send collected responses back to AI agent so it can continue
-            if (collectedResponses.length > 0 && this.agent) {
-              shouldNotifyTurnCompleted = false;
-              const feedbackMessage = `[System Response]\n${collectedResponses.join('\n')}`;
-              await this.agent.sendMessage({ content: feedbackMessage });
-            }
-            // Reset after processing
-            this.currentMsgId = null;
-            this.currentMsgContent = '';
-          }
-
           ipcBridge.acpConversation.responseStream.emit(v);
 
           // Forward signals (finish/error/etc.) to Channel global event bus
@@ -533,10 +640,6 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
             ...(v as any),
             conversation_id: this.conversation_id,
           });
-
-          if (shouldNotifyTurnCompleted) {
-            void ConversationTurnCompletionService.getInstance().notifyPotentialCompletion(this.conversation_id);
-          }
         },
       });
       return this.agent.start().then(async () => {
@@ -707,7 +810,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           }
         }
 
-        const result = await this.agent.sendMessage({
+        const result = await this.sendAgentMessageWithFinishFallback({
           ...data,
           content: contentToSend,
         });
@@ -721,13 +824,14 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         return result;
       }
       const agentSendStart = Date.now();
-      const result = await this.agent.sendMessage(data);
+      const result = await this.sendAgentMessageWithFinishFallback(data);
       if (ACP_PERF_LOG)
         console.log(
           `[ACP-PERF] manager: agent.sendMessage completed ${Date.now() - agentSendStart}ms (total manager.sendMessage: ${Date.now() - managerSendStart}ms)`
         );
       return result;
     } catch (e) {
+      this.clearMissingFinishFallback();
       this.flushBufferedStreamTextMessages();
       cronBusyGuard.setProcessing(this.conversation_id, false);
       this.status = 'finished';
@@ -852,6 +956,65 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
     };
   }
 
+  private async handleFinishSignal(
+    signal: IResponseMessage,
+    backend: AcpBackend,
+    options: { trackActiveTurn?: boolean } = {}
+  ): Promise<boolean> {
+    let shouldNotifyTurnCompleted = true;
+    this.clearMissingFinishFallback();
+    if (options.trackActiveTurn !== false) {
+      this.markActiveTurnFinished();
+    }
+
+    // Flush buffered text chunks before handling turn-level signals
+    this.flushBufferedStreamTextMessages();
+    this.status = 'finished';
+    this.persistCurrentTurnTokenUsage();
+    cronBusyGuard.setProcessing(this.conversation_id, false);
+
+    // ACP streams content in chunks, so we check the accumulated content here
+    if (this.currentMsgContent && hasCronCommands(this.currentMsgContent)) {
+      const message: TMessage = {
+        id: this.currentMsgId || uuid(),
+        msg_id: this.currentMsgId || uuid(),
+        type: 'text',
+        position: 'left',
+        conversation_id: this.conversation_id,
+        content: { content: this.currentMsgContent },
+        status: 'finish',
+        createdAt: Date.now(),
+      };
+      const collectedResponses: string[] = [];
+      await processCronInMessage(this.conversation_id, backend as any, message, (sysMsg) => {
+        collectedResponses.push(sysMsg);
+        const systemMessage: IResponseMessage = {
+          type: 'system',
+          conversation_id: this.conversation_id,
+          msg_id: uuid(),
+          data: sysMsg,
+        };
+        ipcBridge.acpConversation.responseStream.emit(systemMessage);
+      });
+      if (collectedResponses.length > 0 && this.agent) {
+        shouldNotifyTurnCompleted = false;
+        const feedbackMessage = `[System Response]\n${collectedResponses.join('\n')}`;
+        await this.sendAgentMessageWithFinishFallback({ content: feedbackMessage });
+      }
+      this.currentMsgId = null;
+      this.currentMsgContent = '';
+    }
+
+    ipcBridge.acpConversation.responseStream.emit(signal);
+
+    channelEventBus.emitAgentMessage(this.conversation_id, {
+      ...(signal as any),
+      conversation_id: this.conversation_id,
+    });
+
+    return shouldNotifyTurnCompleted;
+  }
+
   /**
    * Ensure yoloMode is enabled for cron job reuse.
    * If already enabled, returns true immediately.
@@ -880,6 +1043,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
    * Uses ACP session/cancel so the connection stays alive for subsequent messages.
    */
   async stop() {
+    this.clearMissingFinishFallback();
     if (this.agent) {
       this.agent.cancelPrompt();
     }
@@ -1216,6 +1380,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
    * timeout and graceful path race against each other.
    */
   kill() {
+    this.clearMissingFinishFallback();
     this.flushBufferedStreamTextMessages();
 
     let killed = false;

@@ -299,10 +299,13 @@ const sleep = (ms: number): Promise<void> =>
     setTimeout(resolve, ms);
   });
 
+export type ConversationTurnCompletedListener = (event: IConversationTurnCompletedEvent) => Promise<void> | void;
+
 export class ConversationTurnCompletionService {
   private static instance: ConversationTurnCompletionService | null = null;
   private readonly emittedKeys = new Map<string, { key: string; timestamp: number }>();
   private readonly inFlight = new Map<string, Promise<void>>();
+  private readonly listeners = new Set<ConversationTurnCompletedListener>();
 
   static getInstance(): ConversationTurnCompletionService {
     if (!this.instance) {
@@ -330,6 +333,13 @@ export class ConversationTurnCompletionService {
   forgetSession(sessionId: string): void {
     this.emittedKeys.delete(sessionId);
     this.inFlight.delete(sessionId);
+  }
+
+  onTurnCompleted(listener: ConversationTurnCompletedListener): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
   }
 
   getDebugState(): {
@@ -369,7 +379,7 @@ export class ConversationTurnCompletionService {
 
         this.pruneEmittedKeys();
         this.emittedKeys.set(sessionId, { key: emittedKey, timestamp: Date.now() });
-        ipcBridge.conversation.turnCompleted.emit(event);
+        this.emitTurnCompleted(event);
         return;
       }
 
@@ -414,6 +424,20 @@ export class ConversationTurnCompletionService {
       model: extractModelInfoFromConversation(snapshot.conversation),
       lastMessage: formattedLastMessage,
     };
+  }
+
+  private emitTurnCompleted(event: IConversationTurnCompletedEvent): void {
+    ipcBridge.conversation.turnCompleted.emit(event);
+
+    for (const listener of this.listeners) {
+      try {
+        void Promise.resolve(listener(event)).catch((error) => {
+          console.error('[ConversationTurnCompletionService] turnCompleted listener failed:', error);
+        });
+      } catch (error) {
+        console.error('[ConversationTurnCompletionService] turnCompleted listener failed:', error);
+      }
+    }
   }
 
   private pruneEmittedKeys(now: number = Date.now()): void {

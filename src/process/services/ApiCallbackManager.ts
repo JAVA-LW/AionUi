@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ipcBridge } from '@/common';
 import type { IConversationTurnCompletedEvent } from '@/common/adapter/ipcBridge';
+import { ConversationTurnCompletionService } from '@process/services/ConversationTurnCompletionService';
 import { getDatabase } from '@process/services/database';
 import { CallbackService } from '@/webserver/services/CallbackService';
 
@@ -31,29 +31,38 @@ export class ApiCallbackManager {
   private initialize(): void {
     console.log('[ApiCallbackManager] Initializing...');
 
-    this.unsubscribe = ipcBridge.conversation.turnCompleted.on(async (event: IConversationTurnCompletedEvent) => {
-      try {
-        await this.handleTurnCompleted(event);
-      } catch (error) {
-        console.error('[ApiCallbackManager] Error handling turn completion:', error);
+    // Subscribe through the in-process completion service.
+    // Bridge emitters broadcast to renderer/web clients, but they do not loop back
+    // into the main process, so outbound callbacks need a local listener here.
+    this.unsubscribe = ConversationTurnCompletionService.getInstance().onTurnCompleted(
+      async (event: IConversationTurnCompletedEvent) => {
+        try {
+          await this.handleTurnCompleted(event);
+        } catch (error) {
+          console.error('[ApiCallbackManager] Error handling turn completion:', error);
+        }
       }
-    });
+    );
 
     console.log('[ApiCallbackManager] Initialized successfully');
   }
 
   private async handleTurnCompleted(event: IConversationTurnCompletedEvent): Promise<void> {
+    console.log(
+      `[ApiCallbackManager] Received turn completion for ${event.sessionId} (state=${event.state}, status=${event.status})`
+    );
     const db = await getDatabase();
 
     const configResult = db.getApiConfig();
-    if (
-      !configResult.success ||
-      !configResult.data?.enabled ||
-      !configResult.data.callbackEnabled ||
-      !configResult.data.callbackUrl
-    ) {
+    const callbackUrl = configResult.data?.callbackUrl?.trim();
+    if (!configResult.success || !configResult.data?.callbackEnabled || !callbackUrl) {
+      console.log('[ApiCallbackManager] Callback skipped because callback is disabled or URL is empty');
       return;
     }
+
+    // Outbound conversation callbacks do not depend on the local HTTP API toggle.
+    const callbackConfig =
+      callbackUrl === configResult.data.callbackUrl ? configResult.data : { ...configResult.data, callbackUrl };
 
     const messagesResult = db.getConversationMessages(event.sessionId, 0, 100);
     const messages = messagesResult.data || [];
@@ -73,7 +82,7 @@ export class ApiCallbackManager {
       runtime: event.runtime,
     };
 
-    void CallbackService.sendCallback(configResult.data, variables);
+    void CallbackService.sendCallback(callbackConfig, variables);
   }
 
   destroy(): void {

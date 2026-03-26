@@ -21,6 +21,7 @@ import './utils/initBridge';
 import './services/i18n'; // Initialize i18n for main process
 import { getChannelManager } from '@process/channels';
 import { ExtensionRegistry } from '@process/extensions';
+import { ApiCallbackManager } from '@process/services/ApiCallbackManager';
 
 export const initializeProcess = async () => {
   const t0 = performance.now();
@@ -28,6 +29,10 @@ export const initializeProcess = async () => {
 
   await initStorage();
   mark('initStorage');
+
+  // Register conversation callback listeners for all app modes, not just WebUI.
+  ApiCallbackManager.getInstance();
+  mark('ApiCallbackManager');
 
   // Initialize Extension Registry (scan and resolve all extensions)
   try {
