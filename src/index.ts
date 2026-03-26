@@ -30,7 +30,6 @@ import { onCloseToTrayChanged, onLanguageChanged } from './process/bridge/system
 import { setInitialLanguage } from '@process/services/i18n';
 import { workerTaskManager } from './process/task/workerTaskManagerSingleton';
 import { setupApplicationMenu } from './process/utils/appMenu';
-import { startWebServer } from './process/webserver';
 import { applyZoomToWindow } from './process/utils/zoom';
 import {
   clearPendingDeepLinkUrl,
@@ -48,6 +47,7 @@ import {
   resolveRemoteAccess,
   resolveWebUIPort,
   restoreDesktopWebUIFromPreferences,
+  startCliWebUI,
 } from './process/utils/webuiConfig';
 import {
   createOrUpdateTray,
@@ -425,7 +425,7 @@ const handleAppReady = async (): Promise<void> => {
     }
     const resolvedPort = resolveWebUIPort(userConfigInfo.config, getSwitchValue);
     const allowRemote = resolveRemoteAccess(userConfigInfo.config, isRemoteMode);
-    await startWebServer(resolvedPort, allowRemote);
+    await startCliWebUI(resolvedPort, allowRemote);
 
     // Keep the process alive in WebUI mode by preventing default quit behavior.
     // On Linux headless (systemd), Electron may attempt to quit when no windows exist.

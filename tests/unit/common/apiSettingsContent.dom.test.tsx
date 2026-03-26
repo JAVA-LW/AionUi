@@ -29,9 +29,9 @@ const testState = vi.hoisted(() => {
       'Conversation runtime diagnostics have moved to the standalone "API Diagnostics" page for focused debugging.',
     'settings.apiPage.docs.title': 'Swagger Docs',
     'settings.apiPage.docs.description':
-      'Swagger docs are served from the local client. WebUI must be running before you can open them directly.',
-    'settings.apiPage.docs.statusReady': 'WebUI Running',
-    'settings.apiPage.docs.statusUnavailable': 'WebUI Not Running',
+      'Swagger docs are served by AionUi. In desktop mode, start WebUI first; in browser/server mode, open them directly from the current server.',
+    'settings.apiPage.docs.statusReady': 'Direct Access Available',
+    'settings.apiPage.docs.statusUnavailable': 'Start WebUI First',
     'settings.apiPage.docs.open': 'Open Docs',
     'settings.apiPage.docs.copySuccess': 'Swagger link copied',
     'settings.apiPage.docs.unavailableWarning': 'Start WebUI before opening Swagger docs.',
@@ -100,6 +100,8 @@ const testState = vi.hoisted(() => {
     getAvailableAgents: vi.fn(),
     getWebuiStatus: vi.fn(),
     openExternal: vi.fn(),
+    openExternalUrl: vi.fn(),
+    isElectronDesktop: vi.fn(() => true),
     configStorageGet: vi.fn(),
     messageSuccess: vi.fn(),
     messageError: vi.fn(),
@@ -280,6 +282,11 @@ vi.mock('@/common/types/codex/codexConfigOptions', () => ({
   getDefaultAcpConfigOptions: () => [],
 }));
 
+vi.mock('@/renderer/utils/platform', () => ({
+  isElectronDesktop: () => testState.isElectronDesktop(),
+  openExternalUrl: (...args: unknown[]) => testState.openExternalUrl(...args),
+}));
+
 vi.mock('@/renderer/utils/model/agentModes', () => ({
   getAgentModes: () => [],
 }));
@@ -331,6 +338,7 @@ describe('ApiSettingsContent', () => {
         localUrl: 'http://localhost:25808',
       },
     });
+    testState.isElectronDesktop.mockReturnValue(true);
     testState.configStorageGet.mockResolvedValue(undefined);
   });
 
@@ -371,5 +379,44 @@ describe('ApiSettingsContent', () => {
     await waitFor(() => {
       expect(testState.messageError).toHaveBeenCalledWith('Failed to save API settings: boom');
     });
+  });
+
+  it('keeps Swagger docs gated by runtime status in desktop mode', async () => {
+    testState.getWebuiStatus.mockResolvedValue({
+      success: true,
+      data: {
+        running: false,
+        localUrl: 'http://localhost:25808',
+      },
+    });
+
+    render(<ApiSettingsContent />);
+
+    await waitFor(() => {
+      expect(testState.getWebuiStatus).toHaveBeenCalledOnce();
+    });
+
+    expect(screen.getByDisplayValue('http://localhost:25808/api/docs')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Open Docs' })).toBeDisabled();
+  });
+
+  it('opens Swagger docs directly from the current server in browser runtime', async () => {
+    testState.isElectronDesktop.mockReturnValue(false);
+    const currentOrigin = window.location.origin;
+    window.history.replaceState({}, '', '/#/settings/api');
+
+    render(<ApiSettingsContent />);
+
+    await waitFor(() => {
+      expect(testState.getApiConfig).toHaveBeenCalledOnce();
+    });
+
+    expect(testState.getWebuiStatus).not.toHaveBeenCalled();
+    expect(screen.getByDisplayValue(`${currentOrigin}/api/docs`)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Docs' }));
+
+    expect(testState.openExternalUrl).toHaveBeenCalledWith(`${currentOrigin}/api/docs`);
+    expect(testState.messageWarning).not.toHaveBeenCalled();
   });
 });

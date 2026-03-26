@@ -675,9 +675,9 @@
     },
     "docs": {
       "title": "Swagger Docs",
-      "description": "Swagger docs are served from the local client. WebUI must be running before you can open them directly.",
-      "statusReady": "WebUI Running",
-      "statusUnavailable": "WebUI Not Running",
+      "description": "Swagger docs are served by AionUi. In desktop mode, start WebUI first; in browser/server mode, open them directly from the current server.",
+      "statusReady": "Direct Access Available",
+      "statusUnavailable": "Start WebUI First",
       "open": "Open Docs",
       "copySuccess": "Swagger link copied",
       "unavailableWarning": "Start WebUI before opening Swagger docs."

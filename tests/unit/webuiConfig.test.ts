@@ -41,6 +41,7 @@ describe('webuiConfig module', () => {
     }));
 
     vi.doMock('@process/webserver', () => ({
+      startWebServer: vi.fn(() => Promise.resolve({ port: 3000, allowRemote: false })),
       startWebServerWithInstance: vi.fn(() => Promise.resolve({ port: 3000 })),
     }));
 
@@ -192,6 +193,22 @@ describe('webuiConfig module', () => {
       const { resolveRemoteAccess } = await import('@process/utils/webuiConfig');
 
       expect(resolveRemoteAccess({}, false)).toBe(false);
+    });
+  });
+
+  describe('startCliWebUI', () => {
+    it('should track CLI-started webui instances for runtime status checks', async () => {
+      const instance = { port: 4567, allowRemote: true };
+      const { startCliWebUI } = await import('@process/utils/webuiConfig');
+      const webserverModule = await import('@process/webserver');
+      const webuiBridgeModule = await import('@process/bridge/webuiBridge');
+
+      vi.mocked(webserverModule.startWebServer).mockResolvedValue(instance);
+
+      await startCliWebUI(4567, true);
+
+      expect(webserverModule.startWebServer).toHaveBeenCalledWith(4567, true);
+      expect(webuiBridgeModule.setWebServerInstance).toHaveBeenCalledWith(instance);
     });
   });
 });

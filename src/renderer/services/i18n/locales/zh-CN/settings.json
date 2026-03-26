@@ -674,9 +674,9 @@
     },
     "docs": {
       "title": "Swagger 文档",
-      "description": "Swagger 文档已集成到本地客户端中。需要先启动 WebUI，才能直接打开文档页面。",
-      "statusReady": "WebUI 已启动",
-      "statusUnavailable": "WebUI 未启动",
+      "description": "Swagger 文档由 AionUi 提供。桌面模式下需要先启动 WebUI；在浏览器或 Server 模式下可直接通过当前服务打开。",
+      "statusReady": "可直接访问",
+      "statusUnavailable": "需先启动 WebUI",
       "open": "打开文档",
       "copySuccess": "Swagger 链接已复制",
       "unavailableWarning": "请先启动 WebUI，再打开 Swagger 文档。"

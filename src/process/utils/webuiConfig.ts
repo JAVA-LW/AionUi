@@ -7,10 +7,10 @@
 import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
-import { setWebServerInstance } from '../bridge/webuiBridge';
-import { ProcessConfig } from './initStorage';
-import { startWebServerWithInstance } from '../webserver';
-import { SERVER_CONFIG } from '../webserver/config/constants';
+import { setWebServerInstance } from '@process/bridge/webuiBridge';
+import { ProcessConfig } from '@process/utils/initStorage';
+import { startWebServer, startWebServerWithInstance } from '@process/webserver';
+import { SERVER_CONFIG } from '@process/webserver/config/constants';
 
 const WEBUI_CONFIG_FILE = 'webui.config.json';
 const DESKTOP_WEBUI_ENABLED_KEY = 'webui.desktop.enabled';
@@ -84,6 +84,11 @@ export const resolveRemoteAccess = (config: WebUIUserConfig, isRemoteMode: boole
   const configRemote = config.allowRemote === true;
 
   return isRemoteMode || hostRequestsRemote || envRemote === true || configRemote;
+};
+
+export const startCliWebUI = async (port: number, allowRemote: boolean): Promise<void> => {
+  const instance = await startWebServer(port, allowRemote);
+  setWebServerInstance(instance);
 };
 
 export const restoreDesktopWebUIFromPreferences = async (): Promise<void> => {

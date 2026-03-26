@@ -13,6 +13,7 @@ import type { AcpBackend, AcpModelInfo, AcpSessionConfigOption } from '@/common/
 import { getDefaultAcpConfigOptions } from '@/common/types/codex/codexConfigOptions';
 import ExtensionSettingsTabContent from '@/renderer/components/settings/SettingsModal/contents/ExtensionSettingsTabContent';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
+import { isElectronDesktop, openExternalUrl } from '@/renderer/utils/platform';
 import { getAgentModes } from '@/renderer/utils/model/agentModes';
 import { Button, Message, Tabs } from '@arco-design/web-react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
@@ -35,6 +36,7 @@ const API_DIAGNOSTICS_EXTENSION_NAME = 'api-diagnostics-devtools';
 
 const ApiSettingsContent: React.FC = () => {
   const { t } = useTranslation();
+  const isDesktopRuntime = isElectronDesktop();
   const [activeTab, setActiveTab] = useState<ApiTabKey>('auth');
   const [diagnosticsTab, setDiagnosticsTab] = useState<IExtensionSettingsTab | null>(null);
   const [config, setConfig] = useState<Partial<IApiConfig>>({
@@ -161,6 +163,11 @@ const ApiSettingsContent: React.FC = () => {
   );
 
   const loadWebuiStatus = useCallback(async () => {
+    if (!isDesktopRuntime) {
+      setWebuiStatus(null);
+      return;
+    }
+
     try {
       const result = await ipcBridge.webui.getStatus.invoke();
       if (result?.success && result.data) {
@@ -173,13 +180,12 @@ const ApiSettingsContent: React.FC = () => {
       console.error('[ApiSettings] Failed to load WebUI status:', error);
       setWebuiStatus(null);
     }
-  }, []);
+  }, [isDesktopRuntime]);
 
   const loadDiagnosticsTab = useCallback(async () => {
     try {
       const tabs = (await extensionsIpc.getSettingsTabs.invoke()) ?? [];
-      const nextDiagnosticsTab =
-        tabs.find((tab) => tab._extensionName === API_DIAGNOSTICS_EXTENSION_NAME) ?? null;
+      const nextDiagnosticsTab = tabs.find((tab) => tab._extensionName === API_DIAGNOSTICS_EXTENSION_NAME) ?? null;
       setDiagnosticsTab(nextDiagnosticsTab);
     } catch (error) {
       console.error('[ApiSettings] Failed to load diagnostics settings tab:', error);
@@ -188,15 +194,24 @@ const ApiSettingsContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    void Promise.all([loadApiConfig(), loadGeneratorOptions(), loadWebuiStatus(), loadDiagnosticsTab()]);
-  }, [loadApiConfig, loadGeneratorOptions, loadWebuiStatus, loadDiagnosticsTab]);
+    void Promise.all([
+      loadApiConfig(),
+      loadGeneratorOptions(),
+      loadDiagnosticsTab(),
+      isDesktopRuntime ? loadWebuiStatus() : Promise.resolve(),
+    ]);
+  }, [isDesktopRuntime, loadApiConfig, loadGeneratorOptions, loadWebuiStatus, loadDiagnosticsTab]);
 
   useEffect(() => {
+    if (!isDesktopRuntime) {
+      return;
+    }
+
     const unsubscribe = ipcBridge.webui.statusChanged.on(() => {
       void loadWebuiStatus();
     });
     return () => unsubscribe();
-  }, [loadWebuiStatus]);
+  }, [isDesktopRuntime, loadWebuiStatus]);
 
   useEffect(() => {
     const unsubscribe = extensionsIpc.stateChanged.on(() => {
@@ -419,10 +434,15 @@ const ApiSettingsContent: React.FC = () => {
 
   const generatedPayloadText = useMemo(() => JSON.stringify(generatedPayload, null, 2), [generatedPayload]);
   const docsUrl = useMemo(() => {
+    if (!isDesktopRuntime) {
+      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:25808';
+      return `${origin}/api/docs`;
+    }
+
     const base = webuiStatus?.localUrl || 'http://localhost:25808';
     return `${base}/api/docs`;
-  }, [webuiStatus?.localUrl]);
-  const canDirectAccessDocs = !!webuiStatus?.running;
+  }, [isDesktopRuntime, webuiStatus?.localUrl]);
+  const canDirectAccessDocs = !isDesktopRuntime || !!webuiStatus?.running;
   const callbackEnabled = !!config.callbackEnabled;
   const jsFilterEnabled = !!config.jsFilterEnabled;
 
@@ -529,28 +549,25 @@ const ApiSettingsContent: React.FC = () => {
       return;
     }
 
-    void ipcBridge.shell.openExternal.invoke(docsUrl);
+    void openExternalUrl(docsUrl);
   }, [canDirectAccessDocs, docsUrl, t]);
 
-  const tabItems = useMemo<Array<{ key: ApiTabKey; label: string }>>(
-    () => {
-      const items: Array<{ key: ApiTabKey; label: string }> = [
-        { key: 'auth', label: t('settings.apiPage.tabs.auth') },
-        { key: 'callback', label: t('settings.apiPage.tabs.callback') },
-        { key: 'generator', label: t('settings.apiPage.tabs.generator') },
-      ];
+  const tabItems = useMemo<Array<{ key: ApiTabKey; label: string }>>(() => {
+    const items: Array<{ key: ApiTabKey; label: string }> = [
+      { key: 'auth', label: t('settings.apiPage.tabs.auth') },
+      { key: 'callback', label: t('settings.apiPage.tabs.callback') },
+      { key: 'generator', label: t('settings.apiPage.tabs.generator') },
+    ];
 
-      if (diagnosticsTab) {
-        items.push({
-          key: 'diagnostics',
-          label: resolveExtTabName(diagnosticsTab),
-        });
-      }
+    if (diagnosticsTab) {
+      items.push({
+        key: 'diagnostics',
+        label: resolveExtTabName(diagnosticsTab),
+      });
+    }
 
-      return items;
-    },
-    [diagnosticsTab, resolveExtTabName, t]
-  );
+    return items;
+  }, [diagnosticsTab, resolveExtTabName, t]);
 
   useEffect(() => {
     if (activeTab !== 'diagnostics') {

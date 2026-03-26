@@ -342,11 +342,12 @@ export async function startWebServerWithInstance(port: number, allowRemote = fal
  * @param port 服务器端口 / Server port
  * @param allowRemote 是否允许远程访问 / Allow remote access
  */
-export async function startWebServer(port: number, allowRemote = false): Promise<void> {
+export async function startWebServer(port: number, allowRemote = false): Promise<WebServerInstance> {
   // 复用 startWebServerWithInstance
   // Reuse startWebServerWithInstance
-  await startWebServerWithInstance(port, allowRemote);
+  const instance = await startWebServerWithInstance(port, allowRemote);
 
   // 不再自动打开浏览器，用户可手动访问控制台输出的 URL
   // No longer auto-open browser, user can manually visit the URL printed in console
+  return instance;
 }

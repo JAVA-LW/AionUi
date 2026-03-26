@@ -675,9 +675,9 @@
     },
     "docs": {
       "title": "Swagger 文件",
-      "description": "Swagger 文件已整合到本地客戶端中。需要先啟動 WebUI，才能直接打開文件頁面。",
-      "statusReady": "WebUI 已啟動",
-      "statusUnavailable": "WebUI 未啟動",
+      "description": "Swagger 文件由 AionUi 提供。桌面模式下需要先啟動 WebUI；在瀏覽器或 Server 模式下可直接透過目前服務開啟。",
+      "statusReady": "可直接存取",
+      "statusUnavailable": "需先啟動 WebUI",
       "open": "打開文件",
       "copySuccess": "Swagger 連結已複製",
       "unavailableWarning": "請先啟動 WebUI，再打開 Swagger 文件。"
