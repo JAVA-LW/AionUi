@@ -4,6 +4,7 @@ import { extensions as extensionsIpc, type IExtensionSettingsTab } from '@/commo
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
 import {
   AlarmClock,
+  Api,
   Communication,
   Computer,
   Earth,
@@ -33,9 +34,12 @@ const BUILTIN_TAB_IDS = [
   'tools',
   'display',
   'webui',
+  'api',
   'system',
   'about',
 ] as const;
+
+const EMBEDDED_SETTINGS_EXTENSION_NAMES = new Set(['api-diagnostics-devtools']);
 
 type SiderItem = {
   id: string;
@@ -44,6 +48,11 @@ type SiderItem = {
   isImageIcon?: boolean;
   /** Route path segment — for builtins: `/settings/{path}`, for extensions: `/settings/ext/{id}` */
   path: string;
+};
+
+export const isSettingsItemSelected = (pathname: string, itemPath: string): boolean => {
+  const targetPath = `/settings/${itemPath}`;
+  return pathname === targetPath || pathname.startsWith(`${targetPath}/`);
 };
 
 const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }> = ({
@@ -139,6 +148,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         icon: isDesktop ? <Earth /> : <Communication />,
         path: 'webui',
       },
+      api: {
+        id: 'api',
+        label: t('settings.api'),
+        icon: <Api />,
+        path: 'api',
+      },
       system: { id: 'system', label: t('settings.system'), icon: <System />, path: 'system' },
       about: { id: 'about', label: t('settings.about'), icon: <Info />, path: 'about' },
     };
@@ -151,7 +166,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
     const afterMap = new Map<string, IExtensionSettingsTab[]>();
     const unanchored: IExtensionSettingsTab[] = [];
 
-    for (const tab of extensionTabs) {
+    for (const tab of extensionTabs.filter((item) => !EMBEDDED_SETTINGS_EXTENSION_NAMES.has(item._extensionName))) {
       if (!tab.position) {
         unanchored.push(tab);
         continue;
@@ -209,7 +224,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       })}
     >
       {menus.map((item) => {
-        const isSelected = pathname.includes(item.path);
+        const isSelected = isSettingsItemSelected(pathname, item.path);
         return (
           <Tooltip key={item.id} {...siderTooltipProps} content={item.label} position='right'>
             <div

@@ -218,6 +218,7 @@
   "cron": "定期タスク",
   "tools": "ツール",
   "webui": "リモート接続",
+  "api": "API",
   "installed": "インストール済み",
   "builtin": "内蔵",
   "channels": "チャンネル",
@@ -660,6 +661,90 @@
     "waitingConnection": "接続が確立されています。お待ちください...",
     "agent": "エージェント",
     "agentDesc": "DingTalk の会話に使用"
+  },
+  "apiPage": {
+    "title": "Local HTTP API",
+    "description": "Manage API access, conversation callbacks, and /api/v1/conversation/create payload generation from separate tabs.",
+    "tabs": {
+      "auth": "API Auth",
+      "callback": "Conversation Callback",
+      "generator": "Parameter Generator"
+    },
+    "docs": {
+      "title": "Swagger Docs",
+      "description": "Swagger docs are served from the local client. WebUI must be running before you can open them directly.",
+      "statusReady": "WebUI Running",
+      "statusUnavailable": "WebUI Not Running",
+      "open": "Open Docs",
+      "copySuccess": "Swagger link copied",
+      "unavailableWarning": "Start WebUI before opening Swagger docs."
+    },
+    "auth": {
+      "enableLabel": "Enable HTTP API",
+      "enableDescription": "Expose local capabilities through /api/v1/conversation/* routes.",
+      "tokenTitle": "API Token",
+      "tokenDescription": "Use a Bearer token to authenticate external requests.",
+      "tokenPlaceholder": "Enter a token manually or generate a secure 64-character token",
+      "generateToken": "Generate Token",
+      "tokenHint": "Request header: Authorization: Bearer {token}",
+      "copySuccess": "Token copied",
+      "diagnosticsMoved": "Conversation runtime diagnostics have moved to the standalone \"API Diagnostics\" page for focused debugging."
+    },
+    "callback": {
+      "title": "Conversation Callback",
+      "description": "Send an HTTP callback to your service after a conversation turn finishes.",
+      "enableLabel": "Enable callback",
+      "enableDescription": "Disabled by default. When enabled, completed conversations will trigger the callback below.",
+      "urlLabel": "Callback URL",
+      "methodLabel": "HTTP Method",
+      "headersTitle": "Request Headers",
+      "headersDescription": "Add custom headers when your callback endpoint needs extra auth or metadata.",
+      "emptyHeaders": "No custom headers added yet",
+      "headerKeyPlaceholder": "Header name",
+      "headerValuePlaceholder": "Header value",
+      "bodyLabel": "Callback Body (JSON)",
+      "bodyVariables": "Available template variables",
+      "jsFilterLabel": "Enable JS filter",
+      "jsFilterDescription": "When disabled, the callback filter output stays empty. When enabled, the app runs jsFilter(input) and injects the returned string into the template.",
+      "jsFilterScriptLabel": "JS filter script",
+      "restoreExample": "Restore Example",
+      "jsFilterHint": "Define a jsFilter(input) function. Its return value will be injected into the callback payload.",
+      "disabledState": "Callback is currently disabled. Turn it on to configure URL, headers, request body, and JS filtering."
+    },
+    "generator": {
+      "title": "/api/v1/conversation/create Parameter Generator",
+      "description": "Reuse the existing CLI detection, mode resolution, and model cache to build request payloads without manual guessing.",
+      "cliLabel": "CLI",
+      "cliPlaceholder": "Select CLI",
+      "cliModelLabel": "CLI Model",
+      "noCachedModels": "No cached model list is available yet. Open a conversation with this CLI once to fetch models first.",
+      "modelLabel": "Model",
+      "modelPlaceholder": "Select model",
+      "modelFallbackPlaceholder": "No provider model detected, placeholder model will be used",
+      "modelNotRequired": "The current CLI type does not require a separate model field.",
+      "modeLabel": "Mode",
+      "configOptionsLabel": "CLI Conversation Options",
+      "noExtraOptions": "This CLI has no extra conversation options.",
+      "configOptionsHint": "Choose an ACP or Codex-compatible CLI first to see its conversation options here.",
+      "workspaceLabel": "Workspace (optional)",
+      "workspacePlaceholder": "Leave empty to use the default AionUi workspace",
+      "messageLabel": "First Message",
+      "messagePlaceholder": "Example: Scan the workspace first and summarize the project structure",
+      "resultTitle": "Generated Result",
+      "resultDescription": "Copy this JSON directly into POST /api/v1/conversation/create.",
+      "copyJson": "Copy JSON",
+      "copySuccess": "Generated JSON copied",
+      "refreshFailed": "Failed to refresh generator sources"
+    },
+    "messages": {
+      "loadFailed": "Failed to load API settings",
+      "saveSuccess": "API settings saved",
+      "saveFailed": "Failed to save API settings",
+      "enabled": "HTTP API enabled",
+      "disabled": "HTTP API disabled",
+      "toggleFailed": "Failed to toggle HTTP API",
+      "generateTokenSuccess": "Generated a new API token"
+    }
   },
   "extensionAssistantReadonly": "拡張アシスタントは読み取り専用です。複製して編集することができます。"
 }

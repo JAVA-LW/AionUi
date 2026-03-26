@@ -69,7 +69,9 @@ const WebuiModalContent: React.FC = () => {
   const { t } = useTranslation();
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
+  const showApiTab = !isPageMode;
   const [activeTab, setActiveTab] = useState<'webui' | 'channels' | 'api'>('webui');
+  const resolvedActiveTab = showApiTab || activeTab !== 'api' ? activeTab : 'webui';
 
   // 检测是否在 Electron 桌面环境 / Check if running in Electron desktop environment
   const isDesktop = isElectronDesktop();
@@ -862,7 +864,7 @@ const WebuiModalContent: React.FC = () => {
   return (
     <div className='flex flex-col h-full w-full'>
       <Tabs
-        activeTab={activeTab}
+        activeTab={resolvedActiveTab}
         onChange={(key) => setActiveTab((key as 'webui' | 'channels' | 'api') || 'webui')}
         type='line'
         className='mb-12px settings-remote-tabs'
@@ -872,33 +874,35 @@ const WebuiModalContent: React.FC = () => {
           title={
             <span
               data-webui-tab='webui'
-              className={`inline-flex items-center gap-6px transition-colors ${activeTab === 'webui' ? 'text-t-primary font-600' : 'text-t-secondary'}`}
+              className={`inline-flex items-center gap-6px transition-colors ${resolvedActiveTab === 'webui' ? 'text-t-primary font-600' : 'text-t-secondary'}`}
             >
               <Earth theme='outline' size='15' />
-              <span>WebUI</span>
+              <span>{t('settings.webui')}</span>
             </span>
           }
         />
-        <Tabs.TabPane
-          key='api'
-          title={
-            <span
-              className={`inline-flex items-center gap-6px transition-colors ${activeTab === 'api' ? 'text-t-primary font-600' : 'text-t-secondary'}`}
-            >
-              <Api theme='outline' size='15' />
-              <span>API</span>
-            </span>
-          }
-        />
+        {showApiTab ? (
+          <Tabs.TabPane
+            key='api'
+            title={
+              <span
+                className={`inline-flex items-center gap-6px transition-colors ${resolvedActiveTab === 'api' ? 'text-t-primary font-600' : 'text-t-secondary'}`}
+              >
+                <Api theme='outline' size='15' />
+                <span>{t('settings.api')}</span>
+              </span>
+            }
+          />
+        ) : null}
         <Tabs.TabPane
           key='channels'
           title={
             <span
               data-webui-tab='channels'
-              className={`inline-flex items-center gap-6px transition-colors ${activeTab === 'channels' ? 'text-t-primary font-600' : 'text-t-secondary'}`}
+              className={`inline-flex items-center gap-6px transition-colors ${resolvedActiveTab === 'channels' ? 'text-t-primary font-600' : 'text-t-secondary'}`}
             >
               <Communication theme='outline' size='15' />
-              <span>Channels</span>
+              <span>{t('settings.channels.title')}</span>
               <span className='inline-flex items-center gap-4px ml-2px'>
                 {CHANNEL_LOGOS.map((item) => (
                   <span
@@ -916,9 +920,9 @@ const WebuiModalContent: React.FC = () => {
         />
       </Tabs>
 
-      {activeTab === 'webui' ? (
+      {resolvedActiveTab === 'webui' ? (
         webuiPanel
-      ) : activeTab === 'api' ? (
+      ) : resolvedActiveTab === 'api' ? (
         <div className='flex-1 min-h-0'>
           <AionScrollArea>
             <ApiSettingsContent />

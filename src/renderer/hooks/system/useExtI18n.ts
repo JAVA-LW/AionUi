@@ -41,14 +41,14 @@ export function useExtI18n(): {
 } {
   const { i18n } = useTranslation();
   const [extI18nData, setExtI18nData] = useState<Record<string, unknown>>({});
+  const locale = i18n?.language || 'en-US';
 
   useEffect(() => {
-    const locale = i18n.language;
     void extensionsIpc.getExtI18nForLocale
       .invoke({ locale })
       .then((data) => setExtI18nData(data ?? {}))
       .catch((err) => console.error('[useExtI18n] Failed to load ext i18n:', err));
-  }, [i18n.language]);
+  }, [locale]);
 
   const resolveExtTabName = useCallback(
     (tab: IExtensionSettingsTab): string => {

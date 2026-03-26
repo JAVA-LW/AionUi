@@ -6,6 +6,7 @@ import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/pl
 import { extensions as extensionsIpc, type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import {
   AlarmClock,
+  Api,
   Communication,
   Computer,
   Earth,
@@ -27,6 +28,13 @@ interface SettingsPageWrapperProps {
   className?: string;
   contentClassName?: string;
 }
+
+const EMBEDDED_SETTINGS_EXTENSION_NAMES = new Set(['api-diagnostics-devtools']);
+
+export const isSettingsNavItemActive = (pathname: string, itemPath: string): boolean => {
+  const targetPath = `/settings/${itemPath}`;
+  return pathname === targetPath || pathname.startsWith(`${targetPath}/`);
+};
 
 const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, className, contentClassName }) => {
   const layout = useLayoutContext();
@@ -68,6 +76,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
         icon: isDesktop ? <Earth theme='outline' size='16' /> : <Communication theme='outline' size='16' />,
         path: 'webui',
       },
+      { id: 'api', label: t('settings.api'), icon: <Api theme='outline' size='16' />, path: 'api' },
       { id: 'system', label: t('settings.system'), icon: <System theme='outline' size='16' />, path: 'system' },
       { id: 'about', label: t('settings.about'), icon: <Info theme='outline' size='16' />, path: 'about' },
     ];
@@ -78,7 +87,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
     const beforeMap = new Map<string, IExtensionSettingsTab[]>();
     const afterMap = new Map<string, IExtensionSettingsTab[]>();
 
-    for (const tab of extensionTabs) {
+    for (const tab of extensionTabs.filter((item) => !EMBEDDED_SETTINGS_EXTENSION_NAMES.has(item._extensionName))) {
       if (!tab.position) {
         unanchored.push(tab);
         continue;
@@ -137,7 +146,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
         {isMobile && (
           <div className='settings-mobile-top-nav'>
             {menuItems.map((item) => {
-              const active = pathname.includes(`/settings/${item.path}`);
+              const active = isSettingsNavItemActive(pathname, item.path);
               return (
                 <button
                   key={item.path}
