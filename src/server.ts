@@ -75,20 +75,29 @@ async function main(): Promise<void> {
     return;
   }
 
-  const [{ default: initStorage }, { ExtensionRegistry }, channelsModule, { initBridgeStandalone }, webserverModule] =
-    await Promise.all([
-      import('./process/utils/initStorage'),
-      import('./process/extensions'),
-      import('./process/channels'),
-      import('./process/utils/initBridgeStandalone'),
-      import('./process/webserver'),
-    ]);
+  const [
+    { default: initStorage },
+    { ExtensionRegistry },
+    channelsModule,
+    { initBridgeStandalone },
+    webserverModule,
+    { ApiCallbackManager },
+  ] = await Promise.all([
+    import('./process/utils/initStorage'),
+    import('./process/extensions'),
+    import('./process/channels'),
+    import('./process/utils/initBridgeStandalone'),
+    import('./process/webserver'),
+    import('./process/services/ApiCallbackManager'),
+  ]);
 
   const { cleanupWebAdapter } = await import('./process/webserver/adapter');
   cleanupWebAdapterFn = cleanupWebAdapter;
   shutdownChannelsFn = () => channelsModule.getChannelManager().shutdown();
 
   await initStorage();
+  // Standalone server mode does not go through initializeProcess(), so register callbacks here too.
+  ApiCallbackManager.getInstance();
 
   try {
     await ExtensionRegistry.getInstance().initialize();
