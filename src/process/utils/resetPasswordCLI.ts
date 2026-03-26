@@ -60,6 +60,16 @@ function generatePassword(): string {
   return password;
 }
 
+export function resolveResetPasswordUsername(argv: string[]): string {
+  const resetPasswordIndex = argv.indexOf('--resetpass');
+  if (resetPasswordIndex === -1) {
+    return 'admin';
+  }
+
+  const argsAfterCommand = argv.slice(resetPasswordIndex + 1);
+  return argsAfterCommand.find((arg) => !arg.startsWith('--')) || 'admin';
+}
+
 /**
  * Reset password for a user (CLI mode, works in packaged apps)
  * 重置用户密码（CLI模式,在打包应用中可用）

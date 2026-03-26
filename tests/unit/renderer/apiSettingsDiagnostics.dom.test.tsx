@@ -28,7 +28,7 @@ vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string) =>
       (
-        {
+        ({
           'common.loading': 'Loading',
           'common.save': 'Save',
           'settings.apiPage.title': 'Local HTTP API',
@@ -36,7 +36,7 @@ vi.mock('react-i18next', () => ({
           'settings.apiPage.tabs.auth': 'API Auth',
           'settings.apiPage.tabs.callback': 'Conversation Callback',
           'settings.apiPage.tabs.generator': 'Parameter Generator',
-        } as Record<string, string>
+        }) as Record<string, string>
       )[key] || key,
   }),
 }));

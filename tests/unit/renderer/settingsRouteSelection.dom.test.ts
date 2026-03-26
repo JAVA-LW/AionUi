@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  isSettingsItemSelected,
-} from '../../../src/renderer/pages/settings/components/SettingsSider';
-import {
-  isSettingsNavItemActive,
-} from '../../../src/renderer/pages/settings/components/SettingsPageWrapper';
+import { isSettingsItemSelected } from '../../../src/renderer/pages/settings/components/SettingsSider';
+import { isSettingsNavItemActive } from '../../../src/renderer/pages/settings/components/SettingsPageWrapper';
 
 describe('settings route selection helpers', () => {
   describe('isSettingsItemSelected', () => {

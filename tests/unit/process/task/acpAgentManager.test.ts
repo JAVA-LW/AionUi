@@ -320,10 +320,7 @@ describe('AcpAgentManager turn completion fallback', () => {
       manager.scheduleMissingFinishFallback();
       await vi.advanceTimersByTimeAsync(2000);
 
-      expect(mainWarn).toHaveBeenCalledWith(
-        '[AcpAgentManager]',
-        expect.stringContaining('idle without finish signal')
-      );
+      expect(mainWarn).toHaveBeenCalledWith('[AcpAgentManager]', expect.stringContaining('idle without finish signal'));
       expect(responseStreamEmit).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'finish',

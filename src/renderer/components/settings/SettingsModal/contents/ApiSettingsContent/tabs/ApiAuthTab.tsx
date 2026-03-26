@@ -106,7 +106,6 @@ const ApiAuthTab: React.FC<ApiAuthTabProps> = ({
         </div>
         <p className='mt-8px text-12px text-t-tertiary'>{t('settings.apiPage.auth.tokenHint')}</p>
       </section>
-
     </div>
   );
 };
