@@ -6,10 +6,10 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ipcBridge } from '@/common';
 import { extensions as extensionsIpc } from '@/common/adapter/ipcBridge';
 import WebviewHost from '@/renderer/components/media/WebviewHost';
 import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/platform';
+import { getExtensionHostApiHandlers } from './hostApiHandlers';
 
 const isExternalSettingsUrl = (url?: string): boolean => /^https?:\/\//i.test(url || '');
 const LOCAL_ASSET_PROTOCOL_PREFIX = 'aion-asset://asset/';
@@ -226,8 +226,8 @@ export const buildEmbeddedExtensionHtml = async (
 
 /**
  * Renders an extension-contributed settings tab page.
- * - External URLs (https://) → WebviewHost with link interception, navigation, partition cache.
- * - Local URLs (aion-asset://) → sandboxed iframe with postMessage bridge.
+ * - External URLs (https://) -> WebviewHost with link interception, navigation, partition cache.
+ * - Local URLs (aion-asset://) -> sandboxed iframe with postMessage bridge.
  *   In browser WebUI mode, local HTML entries are rewritten into srcDoc so the page
  *   can be embedded safely and still load relative scripts/styles.
  */
@@ -334,46 +334,8 @@ const ExtensionSettingsTabContent: React.FC<ExtensionSettingsTabContentProps> = 
         const requestId = data.requestId || data.reqId;
         const action = data.data?.action;
         const payload = data.data?.payload;
-
-        const diagnosticsActions =
-          extensionName === 'api-diagnostics-devtools'
-            ? {
-                'application.getApiDiagnosticsState': () => ipcBridge.application.getApiDiagnosticsState.invoke(),
-                'application.updateApiDiagnosticsConfig': () =>
-                  ipcBridge.application.updateApiDiagnosticsConfig.invoke(
-                    (payload || {}) as { enabled?: boolean; outputDir?: string; sampleIntervalMs?: number }
-                  ),
-                'application.captureApiDiagnosticsSnapshot': () =>
-                  ipcBridge.application.captureApiDiagnosticsSnapshot.invoke(
-                    (payload || {}) as {
-                      sessionId?: string;
-                      persist?: boolean;
-                    }
-                  ),
-                'application.getApiDiagnosticsLiveSnapshot': () =>
-                  ipcBridge.application.getApiDiagnosticsLiveSnapshot.invoke(
-                    (payload || undefined) as {
-                      sessionId?: string;
-                    }
-                  ),
-                'application.getApiDiagnosticsHistory': () =>
-                  ipcBridge.application.getApiDiagnosticsHistory.invoke(
-                    (payload || undefined) as {
-                      limit?: number;
-                    }
-                  ),
-                'shell.showItemInFolder': async () => {
-                  if (typeof payload !== 'string' || !payload.trim()) {
-                    throw new Error('Missing path');
-                  }
-
-                  await ipcBridge.shell.showItemInFolder.invoke(payload);
-                  return { success: true };
-                },
-              }
-            : undefined;
-
-        const handler = action ? diagnosticsActions?.[action as keyof typeof diagnosticsActions] : undefined;
+        const hostApiHandlers = getExtensionHostApiHandlers(extensionName, payload);
+        const handler = action ? hostApiHandlers?.[action] : undefined;
 
         if (!requestId || !handler) {
           frameWindow.postMessage(
@@ -455,7 +417,7 @@ const ExtensionSettingsTabContent: React.FC<ExtensionSettingsTabContentProps> = 
         <>
           {loading ? (
             <div className='absolute inset-0 flex items-center justify-center text-t-secondary text-14px'>
-              <span className='animate-pulse'>Loading…</span>
+              <span className='animate-pulse'>Loading...</span>
             </div>
           ) : null}
           {!shouldUseEmbeddedHtml || embeddedHtml !== null ? (

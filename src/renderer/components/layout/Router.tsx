@@ -2,17 +2,12 @@ import React, { Suspense } from 'react';
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppLoader from '@renderer/components/layout/AppLoader';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
+import {
+  DEFAULT_SETTINGS_ROUTE,
+  SETTINGS_ROUTE_DEFINITIONS,
+} from '@renderer/pages/settings/components/SettingsSider/settingsNavigation';
 const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
-const CronSettingsPage = React.lazy(() => import('@renderer/pages/cron/CronSettingsPage'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
-const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
-const SkillsHubSettings = React.lazy(() => import('@renderer/pages/settings/SkillsHubSettings'));
-const DisplaySettings = React.lazy(() => import('@renderer/pages/settings/DisplaySettings'));
-const GeminiSettings = React.lazy(() => import('@renderer/pages/settings/GeminiSettings'));
-const ModeSettings = React.lazy(() => import('@renderer/pages/settings/ModeSettings'));
-const SystemSettings = React.lazy(() => import('@renderer/pages/settings/SystemSettings'));
-const ToolsSettings = React.lazy(() => import('@renderer/pages/settings/ToolsSettings'));
-const WebuiSettings = React.lazy(() => import('@renderer/pages/settings/WebuiSettings'));
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
 const LoginPage = React.lazy(() => import('@renderer/pages/login'));
 const ComponentsShowcase = React.lazy(() => import('@renderer/pages/TestShowcase'));
@@ -51,19 +46,11 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route index element={<Navigate to='/guid' replace />} />
           <Route path='/guid' element={withRouteFallback(Guid)} />
           <Route path='/conversation/:id' element={withRouteFallback(Conversation)} />
-          <Route path='/settings/cron' element={withRouteFallback(CronSettingsPage)} />
-          <Route path='/settings/gemini' element={withRouteFallback(GeminiSettings)} />
-          <Route path='/settings/model' element={withRouteFallback(ModeSettings)} />
-          <Route path='/settings/agent' element={withRouteFallback(AgentSettings)} />
-          <Route path='/settings/skills-hub' element={withRouteFallback(SkillsHubSettings)} />
-          <Route path='/settings/display' element={withRouteFallback(DisplaySettings)} />
-          <Route path='/settings/webui' element={withRouteFallback(WebuiSettings)} />
-          <Route path='/settings/api' element={withRouteFallback(WebuiSettings)} />
-          <Route path='/settings/system' element={withRouteFallback(SystemSettings)} />
-          <Route path='/settings/about' element={withRouteFallback(SystemSettings)} />
-          <Route path='/settings/tools' element={withRouteFallback(ToolsSettings)} />
+          {SETTINGS_ROUTE_DEFINITIONS.map((route) => (
+            <Route key={route.path} path={`/settings/${route.path}`} element={withRouteFallback(route.component)} />
+          ))}
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
-          <Route path='/settings' element={<Navigate to='/settings/gemini' replace />} />
+          <Route path='/settings' element={<Navigate to={`/settings/${DEFAULT_SETTINGS_ROUTE}`} replace />} />
           <Route path='/test/components' element={withRouteFallback(ComponentsShowcase)} />
         </Route>
         <Route path='*' element={<Navigate to={status === 'authenticated' ? '/guid' : '/login'} replace />} />

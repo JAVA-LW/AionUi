@@ -6,47 +6,13 @@
 
 import type { ChildProcess, ExecFileOptions } from 'child_process';
 import { execFile, spawn, execSync } from 'child_process';
-import { accessSync, readFileSync } from 'fs';
-import { homedir } from 'os';
+import { accessSync } from 'fs';
 import { join } from 'path';
 import type { CodexEventParams } from '@/common/types/codex/types';
 import { loadFullShellEnvironment, mergePaths } from '@process/utils/shellEnv';
 import { globalErrorService, fromNetworkError } from '../core/ErrorService';
 import { JSONRPC_VERSION } from '@/common/types/acpTypes';
-
-/**
- * Get Codex config file path based on platform
- * - All platforms: $CODEX_HOME/config.toml when set
- * - Fallback: ~/.codex/config.toml
- */
-function getCodexConfigPath(): string {
-  const codexHome = process.env.CODEX_HOME?.trim();
-  if (codexHome) {
-    return join(codexHome, 'config.toml');
-  }
-
-  return join(homedir(), '.codex', 'config.toml');
-}
-
-/**
- * Read user's approval_policy setting from Codex config.toml
- * Returns the value if set, otherwise returns null
- */
-function readUserApprovalPolicyConfig(): string | null {
-  try {
-    const configPath = getCodexConfigPath();
-    const content = readFileSync(configPath, 'utf-8');
-    // Simple TOML parsing for top-level approval_policy
-    // Supports: double-quoted, single-quoted, or unquoted values with optional inline comments
-    const match = content.match(/^\s*approval_policy\s*=\s*['"]?([^'"#\s]+)['"]?/m);
-    if (match) {
-      return match[1];
-    }
-  } catch {
-    // Config file doesn't exist or can't be read
-  }
-  return null;
-}
+import { applyCodexLaunchOptions, readUserApprovalPolicyConfig } from './codexLaunchConfig';
 
 type JsonRpcId = number | string;
 
@@ -306,31 +272,8 @@ export class CodexConnection {
 
     const isWindows = process.platform === 'win32';
     let finalArgs = args.length ? args : this.detectMcpCommand(cliPath, cleanEnv);
-
-    // Add approval_policy config for mcp-server
-    // mcp-server may not automatically read all config.toml settings, so we explicitly pass it
-    // Values: untrusted (requires approval for non-trusted commands), on-failure, on-request (model decides), never (auto-approve all)
-    if (options?.yoloMode) {
-      // yoloMode: auto-approve all operations without user confirmation
-      finalArgs = [...finalArgs, '-c', 'approval_policy=never'];
-    } else {
-      // Read user's config.toml setting and pass it explicitly to mcp-server.
-      // IMPORTANT: Skip 'never'.
-      // AionUi manages approval decisions at the Manager layer
-      // (Plan / Auto Edit / Full Auto modes). Passing 'never' to CLI causes
-      // a dual-approval conflict where both CLI and Manager try to approve,
-      // leading to the CLI hanging on exec_approval_request events.
-      const userApprovalPolicy = readUserApprovalPolicyConfig();
-      if (userApprovalPolicy && userApprovalPolicy !== 'never') {
-        finalArgs = [...finalArgs, '-c', `approval_policy=${userApprovalPolicy}`];
-      }
-      // If no user config or user had 'never', don't add any flag -
-      // let Codex use its default (ensures approval events are sent to us)
-    }
-
-    if (options?.sandboxMode) {
-      finalArgs = [...finalArgs, '-c', `sandbox_mode="${options.sandboxMode}"`];
-    }
+    const userApprovalPolicy = readUserApprovalPolicyConfig();
+    finalArgs = applyCodexLaunchOptions(finalArgs, options, userApprovalPolicy);
 
     const envVarCount = Object.keys(cleanEnv).length;
     console.log(`[Codex-Startup] Spawn: ${cliPath} ${finalArgs.join(' ')}`);
