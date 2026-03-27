@@ -1,19 +1,27 @@
 import { readFileSync } from 'fs';
 import { homedir } from 'os';
-import { join } from 'path';
+import { posix, win32 } from 'path';
 
 export type CodexLaunchOptions = {
   yoloMode?: boolean;
   sandboxMode?: 'read-only' | 'workspace-write' | 'danger-full-access';
 };
 
+const isWindowsStylePath = (value: string): boolean => /^[a-zA-Z]:[\\/]/.test(value) || value.startsWith('\\\\');
+
+const joinCodexConfigPath = (baseDirectory: string): string => {
+  const pathApi = process.platform === 'win32' || isWindowsStylePath(baseDirectory) ? win32 : posix;
+  return pathApi.join(baseDirectory, 'config.toml');
+};
+
 export function getCodexConfigPath(env: NodeJS.ProcessEnv = process.env, homeDirectory: string = homedir()): string {
   const codexHome = env.CODEX_HOME?.trim();
   if (codexHome) {
-    return join(codexHome, 'config.toml');
+    return joinCodexConfigPath(codexHome);
   }
 
-  return join(homeDirectory, '.codex', 'config.toml');
+  const pathApi = process.platform === 'win32' || isWindowsStylePath(homeDirectory) ? win32 : posix;
+  return pathApi.join(homeDirectory, '.codex', 'config.toml');
 }
 
 export function parseCodexApprovalPolicy(content: string): string | null {

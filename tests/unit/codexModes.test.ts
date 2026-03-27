@@ -40,7 +40,7 @@ describe('codex mode helpers', () => {
   it('reads Codex config from CODEX_HOME when provided', () => {
     vi.stubEnv('CODEX_HOME', 'C:\\Users\\tester\\.codex-custom');
 
-    expect(getCodexConfigPath()).toBe(join('C:\\Users\\tester\\.codex-custom', 'config.toml'));
+    expect(getCodexConfigPath()).toBe('C:\\Users\\tester\\.codex-custom\\config.toml');
   });
 
   it('falls back to ~/.codex/config.toml', () => {

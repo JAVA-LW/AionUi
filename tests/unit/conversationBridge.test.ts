@@ -9,12 +9,13 @@ function makeChannel(name: string) {
     provider: vi.fn((fn: (...args: any[]) => any) => {
       handlers[name] = fn;
     }),
+    on: vi.fn(() => {}),
     emit: vi.fn(),
     invoke: vi.fn(),
   };
 }
 
-vi.mock('../../src/common', () => ({
+vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: {
       create: makeChannel('create'),
@@ -30,6 +31,12 @@ vi.mock('../../src/common', () => ({
       reloadContext: makeChannel('reloadContext'),
       getWorkspace: makeChannel('getWorkspace'),
       responseSearchWorkSpace: makeChannel('responseSearchWorkSpace'),
+      responseStream: {
+        on: vi.fn(() => {}),
+      },
+      turnCompleted: {
+        on: vi.fn(() => {}),
+      },
       warmup: makeChannel('warmup'),
       confirmation: {
         confirm: makeChannel('confirmation.confirm'),
@@ -38,7 +45,10 @@ vi.mock('../../src/common', () => ({
       approval: {
         check: makeChannel('approval.check'),
       },
-      listChanged: { emit: vi.fn() },
+      listChanged: {
+        emit: vi.fn(),
+        on: vi.fn(() => {}),
+      },
     },
     openclawConversation: {
       getRuntime: makeChannel('openclawConversation.getRuntime'),

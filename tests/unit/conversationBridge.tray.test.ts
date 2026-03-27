@@ -16,6 +16,7 @@ const createCommand = (key: string) => ({
   provider: vi.fn((fn: Provider) => {
     handlers[key] = fn;
   }),
+  on: vi.fn(() => {}),
   invoke: vi.fn(),
   emit: vi.fn(),
 });
@@ -74,8 +75,18 @@ const registerMocks = () => {
         getSlashCommands: createCommand('conversation.getSlashCommands'),
         sendMessage: createCommand('conversation.sendMessage'),
         warmup: createCommand('conversation.warmup'),
-        responseStream: { emit: vi.fn() },
-        listChanged: { emit: vi.fn() },
+        responseStream: {
+          emit: vi.fn(),
+          on: vi.fn(() => {}),
+        },
+        turnCompleted: {
+          emit: vi.fn(),
+          on: vi.fn(() => {}),
+        },
+        listChanged: {
+          emit: vi.fn(),
+          on: vi.fn(() => {}),
+        },
         confirmation: {
           confirm: createCommand('conversation.confirmation.confirm'),
           list: createCommand('conversation.confirmation.list'),
