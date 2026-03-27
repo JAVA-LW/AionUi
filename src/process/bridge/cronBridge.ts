@@ -36,4 +36,8 @@ export function initCronBridge(): void {
   ipcBridge.cron.removeJob.provider(async ({ jobId }) => {
     await cronService.removeJob(jobId);
   });
+
+  ipcBridge.cron.runJobNow.provider(async ({ jobId }) => {
+    return cronService.runJobNow(jobId);
+  });
 }

@@ -766,13 +766,35 @@ const migration_v15: IMigration = {
 };
 
 /**
+ * Migration v15 -> v16: Add schedule_start_at to cron_jobs
+ */
+const migration_v16: IMigration = {
+  version: 16,
+  name: 'Add schedule_start_at to cron_jobs',
+  up: (db) => {
+    const tableInfo = db.prepare('PRAGMA table_info(cron_jobs)').all() as Array<{ name: string }>;
+    const hasScheduleStartAt = tableInfo.some((col) => col.name === 'schedule_start_at');
+
+    if (!hasScheduleStartAt) {
+      db.exec('ALTER TABLE cron_jobs ADD COLUMN schedule_start_at INTEGER');
+      console.log('[Migration v16] Added schedule_start_at column to cron_jobs');
+    } else {
+      console.log('[Migration v16] schedule_start_at already exists, skipping');
+    }
+  },
+  down: (_db) => {
+    console.warn('[Migration v16] Rollback skipped to avoid dropping cron schedule data.');
+  },
+};
+
+/**
  * All migrations in order
  */
 // prettier-ignore
 export const ALL_MIGRATIONS: IMigration[] = [
   migration_v1, migration_v2, migration_v3, migration_v4, migration_v5, migration_v6,
   migration_v7, migration_v8, migration_v9, migration_v10, migration_v11, migration_v12,
-  migration_v13, migration_v14, migration_v15,
+  migration_v13, migration_v14, migration_v15, migration_v16,
 ];
 
 /**

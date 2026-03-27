@@ -216,6 +216,7 @@
   "lightMode": "浅色",
   "darkMode": "深色",
   "agent": "对话Agent",
+  "cron": "定时任务",
   "tools": "工具",
   "webui": "远程连接",
   "installed": "已安装",

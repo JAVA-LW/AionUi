@@ -3,6 +3,7 @@ import { isElectronDesktop, resolveExtensionAssetUrl } from '@/renderer/utils/pl
 import { extensions as extensionsIpc, type IExtensionSettingsTab } from '@/common/adapter/ipcBridge';
 import { useExtI18n } from '@/renderer/hooks/system/useExtI18n';
 import {
+  AlarmClock,
   Communication,
   Computer,
   Earth,
@@ -24,6 +25,7 @@ import { getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 
 /** Builtin settings tab IDs in display order (must match router paths). */
 const BUILTIN_TAB_IDS = [
+  'cron',
   'gemini',
   'model',
   'agent',
@@ -114,6 +116,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
   const menus: SiderItem[] = useMemo(() => {
     // Build builtin items
     const builtinMap: Record<string, SiderItem> = {
+      cron: { id: 'cron', label: t('settings.cron'), icon: <AlarmClock />, path: 'cron' },
       gemini: { id: 'gemini', label: t('settings.gemini'), icon: <Gemini />, path: 'gemini' },
       model: { id: 'model', label: t('settings.model'), icon: <LinkCloud />, path: 'model' },
       agent: {

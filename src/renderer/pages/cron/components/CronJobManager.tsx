@@ -5,43 +5,37 @@
  */
 
 import { iconColors } from '@/renderer/styles/colors';
-import { emitter } from '@/renderer/utils/emitter';
-import { Button, Popover, Tooltip } from '@arco-design/web-react';
+import { Button, Popover } from '@arco-design/web-react';
 import { AlarmClock } from '@icon-park/react';
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { useCronJobs } from '../useCronJobs';
+import { useNavigate } from 'react-router-dom';
 import { getJobStatusFlags } from '../cronUtils';
-import CronJobDrawer from './CronJobDrawer';
+import { useCronJobs } from '../useCronJobs';
 
 interface CronJobManagerProps {
   conversationId: string;
 }
 
-/**
- * Cron job manager component for ChatLayout headerExtra
- * Shows a single job per conversation with drawer for editing
- */
 const CronJobManager: React.FC<CronJobManagerProps> = ({ conversationId }) => {
   const { t } = useTranslation();
-  const { jobs, loading, hasJobs, deleteJob, updateJob } = useCronJobs(conversationId);
-  const [drawerVisible, setDrawerVisible] = useState(false);
+  const navigate = useNavigate();
+  const { jobs, loading, hasJobs } = useCronJobs(conversationId);
 
-  // Handle unconfigured state (no jobs)
+  const openControlPanel = () => {
+    void navigate('/settings/cron');
+  };
+
   if (!hasJobs && !loading) {
-    const handleCreateClick = () => {
-      emitter.emit('sendbox.fill', t('cron.status.defaultPrompt'));
-    };
-
     return (
       <Popover
         trigger='hover'
         position='bottom'
         content={
           <div className='flex flex-col gap-8px p-4px max-w-240px'>
-            <div className='text-13px text-t-secondary'>{t('cron.status.unconfiguredHint')}</div>
-            <Button type='primary' size='mini' onClick={handleCreateClick}>
-              {t('cron.status.createNow')}
+            <div className='text-13px text-t-secondary'>{t('cron.panel.entryHint')}</div>
+            <Button type='primary' size='mini' onClick={openControlPanel}>
+              {t('cron.panel.openPanelButton')}
             </Button>
           </div>
         }
@@ -50,65 +44,49 @@ const CronJobManager: React.FC<CronJobManagerProps> = ({ conversationId }) => {
           type='text'
           size='small'
           className='cron-job-manager-button chat-header-cron-pill !h-auto !w-auto !min-w-0 !px-0 !py-0'
+          onClick={openControlPanel}
         >
           <span className='inline-flex items-center gap-2px rounded-full px-8px py-2px bg-2'>
             <AlarmClock theme='outline' size={16} fill={iconColors.disabled} />
-            <span className='ml-4px w-8px h-8px rounded-full bg-[#86909c]' />
+            <span className='ml-4px h-8px w-8px rounded-full bg-[var(--color-text-4)]' />
           </span>
         </Button>
       </Popover>
     );
   }
 
-  // Don't render anything while loading
   if (loading) {
     return null;
   }
 
-  // Get the single job (assuming one job per conversation)
   const job = jobs[0];
-  if (!job) return null;
+  if (!job) {
+    return null;
+  }
 
   const { hasError, isPaused } = getJobStatusFlags(job);
 
-  const tooltipContent = isPaused ? t('cron.status.paused') : hasError ? t('cron.status.error') : job.name;
-
-  const handleSave = async (updates: { message: string; enabled: boolean }) => {
-    await updateJob(job.id, {
-      enabled: updates.enabled,
-      target: { payload: { kind: 'message', text: updates.message } },
-    });
-  };
-
-  const handleDelete = async () => {
-    await deleteJob(job.id);
-  };
-
   return (
-    <>
-      <Tooltip content={tooltipContent}>
-        <Button
-          type='text'
-          size='small'
-          className='cron-job-manager-button chat-header-cron-pill !h-auto !w-auto !min-w-0 !px-0 !py-0'
-          onClick={() => setDrawerVisible(true)}
-        >
-          <span className='inline-flex items-center gap-2px rounded-full px-8px py-2px bg-2'>
-            <AlarmClock theme='outline' size={16} fill={iconColors.primary} />
-            <span
-              className={`ml-4px w-8px h-8px rounded-full ${hasError ? 'bg-[#f53f3f]' : isPaused ? 'bg-[#ff7d00]' : 'bg-[#00b42a]'}`}
-            />
-          </span>
-        </Button>
-      </Tooltip>
-      <CronJobDrawer
-        visible={drawerVisible}
-        job={job}
-        onClose={() => setDrawerVisible(false)}
-        onSave={handleSave}
-        onDelete={handleDelete}
-      />
-    </>
+    <Button
+      type='text'
+      size='small'
+      className='cron-job-manager-button chat-header-cron-pill !h-auto !w-auto !min-w-0 !px-0 !py-0'
+      title={isPaused ? t('cron.status.paused') : hasError ? t('cron.status.error') : job.name}
+      onClick={openControlPanel}
+    >
+      <span className='inline-flex items-center gap-2px rounded-full px-8px py-2px bg-2'>
+        <AlarmClock theme='outline' size={16} fill={iconColors.primary} />
+        <span
+          className={`ml-4px h-8px w-8px rounded-full ${
+            hasError
+              ? 'bg-[var(--color-danger-6)]'
+              : isPaused
+                ? 'bg-[var(--color-warning-6)]'
+                : 'bg-[var(--color-success-6)]'
+          }`}
+        />
+      </span>
+    </Button>
   );
 };
 

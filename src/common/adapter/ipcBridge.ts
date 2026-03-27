@@ -678,6 +678,7 @@ export const cron = {
   addJob: bridge.buildProvider<ICronJob, ICreateCronJobParams>('cron.add-job'),
   updateJob: bridge.buildProvider<ICronJob, { jobId: string; updates: Partial<ICronJob> }>('cron.update-job'),
   removeJob: bridge.buildProvider<void, { jobId: string }>('cron.remove-job'),
+  runJobNow: bridge.buildProvider<ICronJob, { jobId: string }>('cron.run-job-now'),
   // Events
   onJobCreated: bridge.buildEmitter<ICronJob>('cron.job-created'),
   onJobUpdated: bridge.buildEmitter<ICronJob>('cron.job-updated'),
@@ -690,8 +691,8 @@ export const cron = {
 // Cron job types for IPC
 export type ICronSchedule =
   | { kind: 'at'; atMs: number; description: string }
-  | { kind: 'every'; everyMs: number; description: string }
-  | { kind: 'cron'; expr: string; tz?: string; description: string };
+  | { kind: 'every'; everyMs: number; startAtMs?: number; description: string }
+  | { kind: 'cron'; expr: string; tz?: string; startAtMs?: number; description: string };
 
 export interface ICronJob {
   id: string;

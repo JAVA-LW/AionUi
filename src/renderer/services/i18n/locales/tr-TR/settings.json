@@ -216,6 +216,7 @@
   "lightMode": "Açık",
   "darkMode": "Koyu",
   "agent": "Ajan",
+  "cron": "Zamanlanmış Görevler",
   "tools": "Araçlar",
   "webui": "Uzak Bağlantı",
   "installed": "Yüklü",

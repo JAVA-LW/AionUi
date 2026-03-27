@@ -3,6 +3,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom';
 import AppLoader from '@renderer/components/layout/AppLoader';
 import { useAuth } from '@renderer/hooks/context/AuthContext';
 const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
+const CronSettingsPage = React.lazy(() => import('@renderer/pages/cron/CronSettingsPage'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
 const SkillsHubSettings = React.lazy(() => import('@renderer/pages/settings/SkillsHubSettings'));
@@ -50,6 +51,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route index element={<Navigate to='/guid' replace />} />
           <Route path='/guid' element={withRouteFallback(Guid)} />
           <Route path='/conversation/:id' element={withRouteFallback(Conversation)} />
+          <Route path='/settings/cron' element={withRouteFallback(CronSettingsPage)} />
           <Route path='/settings/gemini' element={withRouteFallback(GeminiSettings)} />
           <Route path='/settings/model' element={withRouteFallback(ModeSettings)} />
           <Route path='/settings/agent' element={withRouteFallback(AgentSettings)} />
