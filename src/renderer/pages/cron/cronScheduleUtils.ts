@@ -31,6 +31,10 @@ export function buildCronSchedule(
   const normalizedValue = Math.max(1, Math.trunc(draft.intervalValue));
 
   if (draft.intervalUnit === 'month') {
+    if (!isMonthIntervalSupported(normalizedValue)) {
+      throw new Error('Unsupported month interval');
+    }
+
     return {
       kind: 'cron',
       expr: buildMonthlyCronExpr(draft.firstRunAtMs, normalizedValue),
@@ -45,6 +49,12 @@ export function buildCronSchedule(
     startAtMs: draft.firstRunAtMs,
     description,
   };
+}
+
+export function isMonthIntervalSupported(intervalValue: number): boolean {
+  const normalizedValue = Math.max(1, Math.trunc(intervalValue));
+
+  return 12 % normalizedValue === 0;
 }
 
 export function scheduleToDraft(schedule: ICronSchedule): CronScheduleDraft {

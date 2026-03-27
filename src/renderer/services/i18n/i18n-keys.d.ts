@@ -472,6 +472,7 @@ export type I18nKey =
   | 'cron.panel.previewTab'
   | 'cron.panel.promptRequired'
   | 'cron.panel.scheduleSummary'
+  | 'cron.panel.unsupportedMonthInterval'
   | 'cron.panel.updateSuccess'
   | 'cron.panel.workspaceLabel'
   | 'cron.panel.workspacePlaceholder'

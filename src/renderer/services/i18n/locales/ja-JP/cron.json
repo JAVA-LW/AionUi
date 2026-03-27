@@ -74,7 +74,8 @@
     "noWorkspace": "ワークスペースなし",
     "entryHint": "管理パネルを開くと、定期タスクの作成、間隔変更、手動実行ができます。",
     "openPanelButton": "管理パネルを開く",
-    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}"
+    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}",
+    "unsupportedMonthInterval": "月単位の間隔は 12 を割り切れる値のみ対応しています（1、2、3、4、6、12）。"
   },
   "unit": {
     "minute": "分",

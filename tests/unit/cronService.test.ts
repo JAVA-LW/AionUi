@@ -218,6 +218,32 @@ describe('CronService', () => {
     expect(job.name).toBe('my-job');
   });
 
+  it('addJob preserves a disabled initial state without starting a timer', async () => {
+    vi.setSystemTime(new Date('2026-03-25T08:00:00Z'));
+    vi.mocked(repo.listByConversation).mockReturnValue([]);
+
+    const job = await service.addJob({
+      name: 'paused-job',
+      enabled: false,
+      schedule: { kind: 'every', everyMs: 10000, description: 'test' },
+      message: 'hello',
+      conversationId: 'conv-1',
+      agentType: 'gemini',
+      createdBy: 'user',
+    });
+
+    expect(repo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'paused-job',
+        enabled: false,
+        state: expect.objectContaining({ nextRunAtMs: Date.now() + 10000 }),
+      })
+    );
+    expect(repo.update).not.toHaveBeenCalled();
+    expect(emitter.emitJobCreated).toHaveBeenCalledWith(expect.objectContaining({ enabled: false }));
+    expect(job.enabled).toBe(false);
+  });
+
   it('addJob throws when conversation already has a scheduled job', async () => {
     const existing = makeJob({ name: 'existing-job', id: 'existing-id' });
     vi.mocked(repo.listByConversation).mockReturnValue([existing]);
@@ -416,6 +442,32 @@ describe('CronService', () => {
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(executor.executeJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('computes the next every run from a past anchor without drifting', async () => {
+    vi.setSystemTime(new Date('2026-03-25T08:00:00Z'));
+
+    const firstRunAtMs = Date.now() - (5 * 60000 + 2000);
+    const expectedNextRunAtMs = firstRunAtMs + 6 * 60000;
+    const job = makeJob({
+      schedule: {
+        kind: 'every',
+        everyMs: 60000,
+        startAtMs: firstRunAtMs,
+        description: 'every minute',
+      },
+    });
+    vi.mocked(repo.listEnabled).mockReturnValue([job]);
+    vi.mocked(repo.getById).mockReturnValue(job);
+
+    await service.init();
+
+    expect(repo.update).toHaveBeenCalledWith(
+      job.id,
+      expect.objectContaining({
+        state: expect.objectContaining({ nextRunAtMs: expectedNextRunAtMs }),
+      })
+    );
   });
 
   // --- handleSystemResume ---

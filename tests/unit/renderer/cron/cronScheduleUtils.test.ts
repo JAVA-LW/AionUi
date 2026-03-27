@@ -5,7 +5,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildCronSchedule, scheduleToDraft } from '../../../../src/renderer/pages/cron/cronScheduleUtils';
+import {
+  buildCronSchedule,
+  isMonthIntervalSupported,
+  scheduleToDraft,
+} from '../../../../src/renderer/pages/cron/cronScheduleUtils';
 
 describe('cronScheduleUtils', () => {
   beforeEach(() => {
@@ -63,6 +67,21 @@ describe('cronScheduleUtils', () => {
       intervalValue: 2,
       intervalUnit: 'month',
     });
+  });
+
+  it('rejects month intervals that cannot be represented correctly', () => {
+    expect(isMonthIntervalSupported(5)).toBe(false);
+
+    expect(() =>
+      buildCronSchedule(
+        {
+          firstRunAtMs: Date.UTC(2026, 2, 25, 10, 0, 0),
+          intervalValue: 5,
+          intervalUnit: 'month',
+        },
+        'Month x5 / 2026-03-25 10:00'
+      )
+    ).toThrow('Unsupported month interval');
   });
 
   it('interprets a single explicit cron month as a yearly interval', () => {

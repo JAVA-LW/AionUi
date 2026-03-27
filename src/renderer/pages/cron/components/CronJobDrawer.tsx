@@ -25,7 +25,7 @@ import {
   resolveCronInitialConfigValues,
   resolveCronInitialMode,
 } from '@/renderer/pages/cron/cronAgentConfigUtils';
-import { buildCronSchedule, scheduleToDraft } from '@/renderer/pages/cron/cronScheduleUtils';
+import { buildCronSchedule, isMonthIntervalSupported, scheduleToDraft } from '@/renderer/pages/cron/cronScheduleUtils';
 import { getAgentModes } from '@/renderer/utils/model/agentModes';
 import MarkdownEditor from '@/renderer/pages/conversation/Preview/components/editors/MarkdownEditor';
 import {
@@ -279,6 +279,10 @@ const CronJobDrawer: React.FC<CronJobDrawerProps> = ({
 
       const firstRunAtMs = dayjs(values.firstRunAt).valueOf();
       const normalizedIntervalValue = Math.max(1, Math.trunc(values.intervalValue));
+      if (values.intervalUnit === 'month' && !isMonthIntervalSupported(normalizedIntervalValue)) {
+        throw new Error(t('cron.panel.unsupportedMonthInterval'));
+      }
+
       const unitLabel = t(CRON_UNIT_KEY_MAP[values.intervalUnit]);
       const scheduleDraft = {
         firstRunAtMs,
@@ -330,6 +334,7 @@ const CronJobDrawer: React.FC<CronJobDrawerProps> = ({
 
         await ipcBridge.cron.addJob.invoke({
           name: values.name.trim(),
+          enabled: values.enabled,
           schedule,
           message: trimmedMessage,
           conversationId: createdConversation.id,
@@ -546,7 +551,26 @@ const CronJobDrawer: React.FC<CronJobDrawerProps> = ({
             <FormItem
               field='intervalValue'
               label={t('cron.panel.intervalValueLabel')}
-              rules={[{ required: true, message: t('cron.panel.intervalValueRequired') }]}
+              rules={[
+                { required: true, message: t('cron.panel.intervalValueRequired') },
+                {
+                  validator: (value, callback) => {
+                    const intervalUnit = form.getFieldValue('intervalUnit');
+                    if (intervalUnit !== 'month' || value === undefined || value === null || value === '') {
+                      callback();
+                      return;
+                    }
+
+                    const numericValue = typeof value === 'number' ? value : Number(value);
+                    if (Number.isNaN(numericValue) || isMonthIntervalSupported(numericValue)) {
+                      callback();
+                      return;
+                    }
+
+                    callback(t('cron.panel.unsupportedMonthInterval'));
+                  },
+                },
+              ]}
               className='!mb-0'
             >
               <InputNumber min={1} precision={0} style={{ width: '100%' }} />

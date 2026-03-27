@@ -74,7 +74,8 @@
     "noWorkspace": "未设置工作空间",
     "entryHint": "打开控制面板即可创建定时任务、调整重复间隔，或手动触发已有任务。",
     "openPanelButton": "打开控制面板",
-    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}"
+    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}",
+    "unsupportedMonthInterval": "按月重复仅支持能整除 12 的间隔：1、2、3、4、6 或 12。"
   },
   "unit": {
     "minute": "分钟",

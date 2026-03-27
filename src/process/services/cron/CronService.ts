@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { CronMessageMeta, TMessage } from '@/common/chat/chatLib';
+import type { TMessage } from '@/common/chat/chatLib';
 import { uuid } from '@/common/utils';
 import { addMessage } from '@process/utils/message';
 import { getPlatformServices } from '@/common/platform';
@@ -23,6 +23,7 @@ import type { ICronJobExecutor } from './ICronJobExecutor';
  */
 export type CreateCronJobParams = {
   name: string;
+  enabled?: boolean;
   schedule: CronSchedule;
   message: string;
   conversationId: string;
@@ -34,6 +35,8 @@ export type CreateCronJobParams = {
 type ExecuteJobOptions = {
   preserveNextRunAtMs?: boolean;
 };
+
+const padCronDatePart = (value: number): string => String(value).padStart(2, '0');
 
 /**
  * CronService - Core scheduling service for AionUI
@@ -127,7 +130,7 @@ export class CronService {
     const job: CronJob = {
       id: jobId,
       name: params.name,
-      enabled: true,
+      enabled: params.enabled ?? true,
       schedule: params.schedule,
       target: {
         payload: { kind: 'message', text: params.message },
@@ -162,9 +165,10 @@ export class CronService {
       console.warn('[CronService] Failed to update conversation modifyTime:', err);
     }
 
-    // Start timer
-    await this.startTimer(job);
-    await this.updatePowerBlocker();
+    if (job.enabled) {
+      await this.startTimer(job);
+      await this.updatePowerBlocker();
+    }
 
     // Emit event to notify frontend (especially when created by agent)
     this.emitter.emitJobCreated(job);
@@ -658,9 +662,8 @@ export class CronService {
 
   private formatCronStartAt(startAtMs: number): string {
     const date = new Date(startAtMs);
-    const pad = (value: number) => String(value).padStart(2, '0');
 
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+    return `${date.getFullYear()}-${padCronDatePart(date.getMonth() + 1)}-${padCronDatePart(date.getDate())}T${padCronDatePart(date.getHours())}:${padCronDatePart(date.getMinutes())}:${padCronDatePart(date.getSeconds())}`;
   }
 
   private getNextEveryRunAtMs(schedule: Extract<CronSchedule, { kind: 'every' }>): number {
@@ -671,12 +674,14 @@ export class CronService {
       return now + schedule.everyMs;
     }
 
-    let nextRunAtMs = anchor;
-    while (nextRunAtMs <= now) {
-      nextRunAtMs += schedule.everyMs;
+    if (anchor > now) {
+      return anchor;
     }
 
-    return nextRunAtMs;
+    const elapsedMs = now - anchor;
+    const completedIntervals = Math.floor(elapsedMs / schedule.everyMs) + 1;
+
+    return anchor + completedIntervals * schedule.everyMs;
   }
 }
 

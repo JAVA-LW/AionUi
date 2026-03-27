@@ -74,7 +74,8 @@
     "noWorkspace": "No workspace",
     "entryHint": "Open the control panel to create a scheduled task, adjust its interval, or manually trigger it.",
     "openPanelButton": "Open control panel",
-    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}"
+    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}",
+    "unsupportedMonthInterval": "Monthly intervals must divide evenly into 12 months (1, 2, 3, 4, 6, or 12)."
   },
   "unit": {
     "minute": "Minute",

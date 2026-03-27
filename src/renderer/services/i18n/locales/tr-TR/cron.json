@@ -74,7 +74,8 @@
     "noWorkspace": "Çalışma alanı yok",
     "entryHint": "Kontrol panelini açarak görev oluşturabilir, aralığı değiştirebilir veya manuel olarak çalıştırabilirsiniz.",
     "openPanelButton": "Kontrol panelini aç",
-    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}"
+    "scheduleSummary": "{{unit}} x{{count}} / {{startAt}}",
+    "unsupportedMonthInterval": "Aylık aralıklar yalnızca 12'yi tam bölen değerleri destekler (1, 2, 3, 4, 6 veya 12)."
   },
   "unit": {
     "minute": "Dakika",
