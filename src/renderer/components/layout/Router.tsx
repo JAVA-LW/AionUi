@@ -6,6 +6,7 @@ const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
 const CronSettingsPage = React.lazy(() => import('@renderer/pages/cron/CronSettingsPage'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
 const AgentSettings = React.lazy(() => import('@renderer/pages/settings/AgentSettings'));
+const AssistantSettings = React.lazy(() => import('@renderer/pages/settings/AssistantSettings'));
 const SkillsHubSettings = React.lazy(() => import('@renderer/pages/settings/SkillsHubSettings'));
 const DisplaySettings = React.lazy(() => import('@renderer/pages/settings/DisplaySettings'));
 const GeminiSettings = React.lazy(() => import('@renderer/pages/settings/GeminiSettings'));
@@ -54,6 +55,7 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           <Route path='/settings/cron' element={withRouteFallback(CronSettingsPage)} />
           <Route path='/settings/gemini' element={withRouteFallback(GeminiSettings)} />
           <Route path='/settings/model' element={withRouteFallback(ModeSettings)} />
+          <Route path='/settings/assistants' element={withRouteFallback(AssistantSettings)} />
           <Route path='/settings/agent' element={withRouteFallback(AgentSettings)} />
           <Route path='/settings/skills-hub' element={withRouteFallback(SkillsHubSettings)} />
           <Route path='/settings/display' element={withRouteFallback(DisplaySettings)} />
