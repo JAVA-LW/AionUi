@@ -193,36 +193,37 @@ describe('AcpAgentManager turn completion fallback', () => {
     } as any) as any;
   };
 
-  it('synthesizes finish when ACP send resolves without a finish signal', async () => {
+  it('keeps ACP runtime active when prompt dispatch resolves before finish arrives', async () => {
     const manager = await createManager();
     manager.persistCurrentTurnTokenUsage = vi.fn();
     manager.agent = {
-      sendMessage: vi.fn(async () => ({ success: true, data: null })),
+      sendMessage: vi.fn(async () => {
+        manager.activeTrackedTurnHasRuntimeActivity = true;
+        return { success: true, data: null };
+      }),
     };
     manager.initAgent = vi.fn(async () => manager.agent);
 
     await manager.sendMessage({ content: 'hello' });
 
     expect(manager.agent.sendMessage).toHaveBeenCalledWith({ content: 'hello' });
-    expect(cronBusyGuardSetProcessing).toHaveBeenNthCalledWith(1, 'session-1', true);
-    expect(cronBusyGuardSetProcessing).toHaveBeenNthCalledWith(2, 'session-1', false);
-    expect(mainWarn).toHaveBeenCalledTimes(1);
-    expect(responseStreamEmit).toHaveBeenCalledWith(
+    expect(cronBusyGuardSetProcessing).toHaveBeenCalledTimes(1);
+    expect(cronBusyGuardSetProcessing).toHaveBeenCalledWith('session-1', true);
+    expect(mainWarn).not.toHaveBeenCalled();
+    expect(responseStreamEmit).not.toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'finish',
-        conversation_id: 'session-1',
       })
     );
-    expect(channelEmitAgentMessage).toHaveBeenCalledWith(
+    expect(channelEmitAgentMessage).not.toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
         type: 'finish',
-        conversation_id: 'session-1',
       })
     );
-    expect(notifyPotentialCompletion).toHaveBeenCalledWith('session-1');
-    expect(manager.persistCurrentTurnTokenUsage).toHaveBeenCalledTimes(1);
-    expect(manager.status).toBe('finished');
+    expect(notifyPotentialCompletion).not.toHaveBeenCalled();
+    expect(manager.persistCurrentTurnTokenUsage).not.toHaveBeenCalled();
+    expect(manager.status).toBe('running');
   });
 
   it('does not synthesize a second finish when the backend already emitted one', async () => {

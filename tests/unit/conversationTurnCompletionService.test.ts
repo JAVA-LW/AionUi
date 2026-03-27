@@ -7,6 +7,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const emitSpy = vi.fn();
+const responseStreamOn = vi.fn();
+const turnCompletedOn = vi.fn();
+const listChangedOn = vi.fn();
 let flushed = false;
 const getTask = vi.fn(() => undefined);
 const getConversationRuntimeTask = vi.fn(() => ({ task: undefined }));
@@ -53,8 +56,15 @@ const buildDatabaseMock = () => ({
 vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: {
+      responseStream: {
+        on: responseStreamOn,
+      },
       turnCompleted: {
+        on: turnCompletedOn,
         emit: emitSpy,
+      },
+      listChanged: {
+        on: listChangedOn,
       },
     },
   },
@@ -92,6 +102,12 @@ describe('ConversationTurnCompletionService', () => {
   beforeEach(() => {
     flushed = false;
     emitSpy.mockReset();
+    responseStreamOn.mockReset();
+    responseStreamOn.mockReturnValue(() => {});
+    turnCompletedOn.mockReset();
+    turnCompletedOn.mockReturnValue(() => {});
+    listChangedOn.mockReset();
+    listChangedOn.mockReturnValue(() => {});
     getTask.mockReset();
     getTask.mockReturnValue(undefined);
     getConversationRuntimeTask.mockReset();
@@ -146,6 +162,69 @@ describe('ConversationTurnCompletionService', () => {
       })
     );
     expect(getTask).toHaveBeenCalledWith('session-1');
+  });
+
+  it('prefers the AionUI live generating state while stream activity is still in progress', async () => {
+    const task = {
+      status: 'finished',
+      getConfirmations: () => [],
+    };
+    getTask.mockReturnValue(task);
+
+    const { getConversationStatusSnapshot } =
+      await import('../../src/process/services/ConversationTurnCompletionService');
+
+    const handleResponseStream = responseStreamOn.mock.calls[0]?.[0] as
+      | ((message: { conversation_id: string; type: string; data: unknown; msg_id: string }) => void)
+      | undefined;
+
+    handleResponseStream?.({
+      conversation_id: 'session-1',
+      type: 'content',
+      data: 'partial',
+      msg_id: 'assistant-1',
+    });
+
+    const snapshot = getConversationStatusSnapshot('session-1', {
+      touchTask: false,
+    });
+
+    expect(snapshot).toEqual(
+      expect.objectContaining({
+        status: 'running',
+        state: 'ai_generating',
+        canSendMessage: false,
+      })
+    );
+  });
+
+  it('keeps generating state while processing activity is still fresh', async () => {
+    const task = {
+      status: 'finished',
+      getConfirmations: () => [],
+    };
+    flushed = true;
+    getTask.mockReturnValue(task);
+    isProcessing.mockReturnValue(true);
+    getLastActiveAt.mockReturnValue(Date.now());
+
+    const { getConversationStatusSnapshot } =
+      await import('../../src/process/services/ConversationTurnCompletionService');
+
+    const snapshot = getConversationStatusSnapshot('session-1', {
+      touchTask: false,
+    });
+
+    expect(snapshot).toEqual(
+      expect.objectContaining({
+        status: 'running',
+        state: 'ai_generating',
+        runtime: expect.objectContaining({
+          isProcessing: true,
+          processingStale: false,
+        }),
+      })
+    );
   });
 
   it('ignores stale processing flags after finished output stops updating', async () => {

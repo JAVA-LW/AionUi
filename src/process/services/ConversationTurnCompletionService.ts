@@ -9,6 +9,7 @@ import type { IConversationTurnCompletedEvent } from '@/common/adapter/ipcBridge
 import type { TChatConversation } from '@/common/config/storage';
 import { getDatabaseSync } from '@process/services/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
+import { conversationLiveStateService } from '@process/services/ConversationLiveStateService';
 import { getConversationRuntimeTask } from '@process/services/ConversationRuntimeService';
 import { flushConversationMessages } from '@process/utils/message';
 
@@ -174,6 +175,7 @@ export const deriveConversationRuntimeStatus = (
 
   const hasTask = !!task;
   const taskStatus = task?.status;
+  const isGeneratingLikeUi = conversationLiveStateService.isGeneratingLikeUi(sessionId);
   const rawIsProcessing = cronBusyGuard.isProcessing(sessionId);
   const lastActiveAt = cronBusyGuard.getLastActiveAt(sessionId);
   const pendingConfirmations = typeof task?.getConfirmations === 'function' ? task.getConfirmations().length : 0;
@@ -195,6 +197,16 @@ export const deriveConversationRuntimeStatus = (
     lastActiveAt,
     processingStale,
   };
+
+  if (isGeneratingLikeUi) {
+    return {
+      status: 'running' as ConversationStatusValue,
+      state: 'ai_generating' as ConversationRuntimeState,
+      detail: 'AI is generating response',
+      canSendMessage: false,
+      runtime,
+    };
+  }
 
   if (isErrorMessage(lastMessage)) {
     return {

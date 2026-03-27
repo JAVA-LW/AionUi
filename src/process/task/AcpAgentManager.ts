@@ -101,6 +101,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
   private missingFinishFallbackTurnId: number | null = null;
   private nextTrackedTurnId: number = 0;
   private activeTrackedTurnId: number | null = null;
+  private activeTrackedTurnHasRuntimeActivity: boolean = false;
   private readonly completedTrackedTurnIds = new Set<number>();
 
   constructor(data: AcpAgentManagerData) {
@@ -175,6 +176,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
     const turnId = this.nextTrackedTurnId + 1;
     this.nextTrackedTurnId = turnId;
     this.activeTrackedTurnId = turnId;
+    this.activeTrackedTurnHasRuntimeActivity = false;
     return turnId;
   }
 
@@ -205,8 +207,17 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
   private clearTrackedTurn(turnId: number): void {
     if (this.activeTrackedTurnId === turnId) {
       this.activeTrackedTurnId = null;
+      this.activeTrackedTurnHasRuntimeActivity = false;
     }
     this.completedTrackedTurnIds.delete(turnId);
+  }
+
+  private markTrackedTurnRuntimeActivity(): void {
+    if (this.activeTrackedTurnId === null) {
+      return;
+    }
+
+    this.activeTrackedTurnHasRuntimeActivity = true;
   }
 
   private clearMissingFinishFallback(): void {
@@ -279,10 +290,14 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         return result;
       }
 
+      if (this.activeTrackedTurnId === turnId && this.activeTrackedTurnHasRuntimeActivity) {
+        return result;
+      }
+
       this.clearTrackedTurn(turnId);
       mainWarn(
         '[AcpAgentManager]',
-        `ACP turn resolved without finish signal; synthesizing finish for ${this.conversation_id} (${this.options.backend})`
+        `ACP turn resolved without runtime activity or finish signal; synthesizing finish for ${this.conversation_id} (${this.options.backend})`
       );
       const shouldNotifyTurnCompleted = await this.handleFinishSignal(
         {
@@ -471,6 +486,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
 
           const pipelineStart = Date.now();
           cronBusyGuard.touchActivity(this.conversation_id);
+          this.markTrackedTurnRuntimeActivity();
 
           // Reduce status noise: show full lifecycle only for the first turn.
           // After first turn, only keep failure statuses to avoid reconnect chatter.
@@ -603,6 +619,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           }
 
           cronBusyGuard.touchActivity(this.conversation_id);
+          this.markTrackedTurnRuntimeActivity();
           // Flush buffered text chunks before handling turn-level signals
           this.flushBufferedStreamTextMessages();
 

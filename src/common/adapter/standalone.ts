@@ -5,13 +5,14 @@
  */
 import { EventEmitter } from 'events';
 import { bridge } from '@office-ai/platform';
-import { broadcastToAll, setBridgeEmitter } from './registry';
+import { broadcastToAll, getBridgeEmitter, setBridgeEmitter } from './registry';
 
 const internalEmitter = new EventEmitter();
 internalEmitter.setMaxListeners(100);
 
 bridge.adapter({
   emit(name, data) {
+    getBridgeEmitter()?.emit(name, data);
     // Broadcast to all connected WebSocket clients
     broadcastToAll(name, data);
   },

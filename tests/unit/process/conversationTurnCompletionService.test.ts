@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const turnCompletedEmit = vi.fn();
+const responseStreamOn = vi.fn();
+const turnCompletedOn = vi.fn();
+const listChangedOn = vi.fn();
 const flushConversationMessages = vi.fn(async () => {});
 const getConversation = vi.fn();
 const getConversationMessages = vi.fn();
@@ -11,8 +14,15 @@ const cronBusyGuardGetLastActiveAt = vi.fn();
 vi.mock('@/common', () => ({
   ipcBridge: {
     conversation: {
+      responseStream: {
+        on: responseStreamOn,
+      },
       turnCompleted: {
+        on: turnCompletedOn,
         emit: turnCompletedEmit,
+      },
+      listChanged: {
+        on: listChangedOn,
       },
     },
   },
@@ -68,6 +78,12 @@ describe('ConversationTurnCompletionService', () => {
   beforeEach(() => {
     vi.resetModules();
     turnCompletedEmit.mockReset();
+    responseStreamOn.mockReset();
+    responseStreamOn.mockReturnValue(() => {});
+    turnCompletedOn.mockReset();
+    turnCompletedOn.mockReturnValue(() => {});
+    listChangedOn.mockReset();
+    listChangedOn.mockReturnValue(() => {});
     flushConversationMessages.mockReset();
     flushConversationMessages.mockResolvedValue(undefined);
     getConversation.mockReset();

@@ -12,7 +12,6 @@ import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import type { IMcpServer, TProviderWithModel, TokenUsageData } from '@/common/config/storage';
 import { ProcessConfig, getSkillsDir } from '@process/utils/initStorage';
 import { ExtensionRegistry } from '@process/extensions';
-import { buildSystemInstructionsWithSkillsIndex } from './agentUtils';
 import { detectSkillLoadRequest, AcpSkillManager, buildSkillContentText } from './AcpSkillManager';
 import { uuid } from '@/common/utils';
 import { getProviderAuthType } from '@/common/utils/platformAuthType';
@@ -94,7 +93,7 @@ export class GeminiAgentManager extends BaseAgentManager<
       if (text) {
         await this.postMessagePromise('init.history', { text });
       }
-    } catch (e) {
+    } catch {
       // ignore history injection errors
     }
   }
@@ -314,7 +313,7 @@ export class GeminiAgentManager extends BaseAgentManager<
         });
 
       return mcpConfig;
-    } catch (error) {
+    } catch {
       this.mcpFingerprint = '[]';
       return {};
     }
@@ -375,10 +374,7 @@ export class GeminiAgentManager extends BaseAgentManager<
           });
         });
       })
-      .then(() => super.sendMessage(data))
-      .finally(() => {
-        cronBusyGuard.setProcessing(this.conversation_id, false);
-      });
+      .then(() => super.sendMessage(data));
     return result;
   }
 
@@ -411,7 +407,7 @@ export class GeminiAgentManager extends BaseAgentManager<
 
   private getConfirmationButtons = (
     confirmationDetails: IMessageToolGroup['content'][number]['confirmationDetails'],
-    t: (key: string, options?: any) => string
+    t: (key: string, options?: Record<string, unknown>) => string
   ) => {
     if (!confirmationDetails) return {};
     let question: string;
@@ -607,6 +603,10 @@ export class GeminiAgentManager extends BaseAgentManager<
     super.init();
     // 接受来子进程的对话消息
     this.on('gemini.message', (data) => {
+      if (data.type !== 'finish') {
+        cronBusyGuard.touchActivity(this.conversation_id);
+      }
+
       // Mark as finished when content is output (visible to user)
       // Gemini uses: content, tool_group
       const contentTypes = ['content', 'tool_group'];
@@ -615,7 +615,9 @@ export class GeminiAgentManager extends BaseAgentManager<
       }
 
       if (data.type === 'finish') {
+        this.status = 'finished';
         this.persistCurrentTurnTokenUsage();
+        cronBusyGuard.setProcessing(this.conversation_id, false);
         // When stream finishes, check for cron commands in the accumulated message
         // Use longer delay and retry logic to ensure message is persisted
         this.checkCronWithRetry(0);

@@ -11,6 +11,8 @@ const getConversationMessages = vi.fn();
 const notifyPotentialCompletion = vi.fn();
 const hasCronCommands = vi.fn(() => false);
 const extractTextFromMessage = vi.fn(() => 'done');
+const cronBusyGuardSetProcessing = vi.fn();
+const cronBusyGuardTouchActivity = vi.fn();
 const buildDatabaseMock = () => ({
   getConversationMessages,
   updateConversation: vi.fn(),
@@ -108,7 +110,8 @@ vi.mock('@process/utils/message', () => ({
 
 vi.mock('@process/services/cron/CronBusyGuard', () => ({
   cronBusyGuard: {
-    setProcessing: vi.fn(),
+    setProcessing: cronBusyGuardSetProcessing,
+    touchActivity: cronBusyGuardTouchActivity,
   },
 }));
 
@@ -180,7 +183,9 @@ vi.mock('../../src/process/task/ThinkTagDetector', () => ({
 }));
 
 vi.mock('@process/agent/gemini/GeminiApprovalStore', () => ({
-  GeminiApprovalStore: class MockGeminiApprovalStore {},
+  GeminiApprovalStore: class MockGeminiApprovalStore {
+    readonly isMock = true;
+  },
 }));
 
 vi.mock('@process/agent/gemini/cli/tools/tools', () => ({
@@ -202,6 +207,8 @@ describe('GeminiAgentManager turn completion', () => {
     hasCronCommands.mockReturnValue(false);
     extractTextFromMessage.mockReset();
     extractTextFromMessage.mockReturnValue('done');
+    cronBusyGuardSetProcessing.mockReset();
+    cronBusyGuardTouchActivity.mockReset();
     vi.resetModules();
   });
 
@@ -251,5 +258,74 @@ describe('GeminiAgentManager turn completion', () => {
     expect(found).toBe(true);
     expect(flushConversationMessages).toHaveBeenCalledWith('session-1');
     expect(notifyPotentialCompletion).toHaveBeenCalledWith('session-1');
+  });
+
+  it('keeps conversation busy until the Gemini stream emits finish', async () => {
+    const { GeminiAgentManager } = await import('../../src/process/task/GeminiAgentManager');
+    const manager = Object.create(GeminiAgentManager.prototype) as {
+      conversation_id: string;
+      bootstrap: Promise<void>;
+      refreshWorkerIfMcpChanged: () => Promise<void>;
+      sendMessage: (data: { input: string; msg_id: string }) => Promise<unknown>;
+    };
+
+    manager.conversation_id = 'session-1';
+    manager.bootstrap = Promise.resolve();
+    manager.refreshWorkerIfMcpChanged = vi.fn(async () => {});
+
+    await manager.sendMessage({
+      input: 'hello',
+      msg_id: 'user-1',
+    });
+
+    expect(cronBusyGuardSetProcessing).toHaveBeenCalledTimes(1);
+    expect(cronBusyGuardSetProcessing).toHaveBeenCalledWith('session-1', true);
+  });
+
+  it('refreshes activity and clears busy state when the Gemini stream finishes', async () => {
+    const { GeminiAgentManager } = await import('../../src/process/task/GeminiAgentManager');
+    const handlers = new Map<string, (data: Record<string, unknown>) => void>();
+    const manager = Object.create(GeminiAgentManager.prototype) as {
+      conversation_id: string;
+      status?: string;
+      on: (event: string, handler: (data: Record<string, unknown>) => void) => void;
+      filterThinkTagsFromMessage: (data: unknown) => unknown;
+      persistCurrentTurnTokenUsage: () => void;
+      checkCronWithRetry: (attempt: number) => void;
+      handleConformationMessage: () => void;
+      init: () => void;
+    };
+
+    manager.conversation_id = 'session-1';
+    manager.on = vi.fn((event, handler) => {
+      handlers.set(event, handler);
+    });
+    manager.filterThinkTagsFromMessage = vi.fn((data) => data);
+    manager.persistCurrentTurnTokenUsage = vi.fn();
+    manager.checkCronWithRetry = vi.fn();
+    manager.handleConformationMessage = vi.fn();
+
+    manager.init();
+
+    const onGeminiMessage = handlers.get('gemini.message');
+    expect(onGeminiMessage).toBeTypeOf('function');
+
+    onGeminiMessage?.({
+      type: 'content',
+      data: 'chunk',
+      msg_id: 'assistant-1',
+    });
+
+    expect(cronBusyGuardTouchActivity).toHaveBeenCalledWith('session-1');
+
+    onGeminiMessage?.({
+      type: 'finish',
+      data: '',
+      msg_id: 'assistant-1',
+    });
+
+    expect(manager.status).toBe('finished');
+    expect(cronBusyGuardSetProcessing).toHaveBeenCalledWith('session-1', false);
+    expect(manager.checkCronWithRetry).toHaveBeenCalledWith(0);
   });
 });

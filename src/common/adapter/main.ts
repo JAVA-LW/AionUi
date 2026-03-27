@@ -9,7 +9,7 @@ import { ipcMain } from 'electron';
 
 import { bridge } from '@office-ai/platform';
 import { ADAPTER_BRIDGE_EVENT_KEY } from './constant';
-import { registerWebSocketBroadcaster, getBridgeEmitter, setBridgeEmitter, broadcastToAll } from './registry';
+import { broadcastToAll, getBridgeEmitter, registerWebSocketBroadcaster, setBridgeEmitter } from './registry';
 
 /**
  * Bridge event data structure for IPC communication
@@ -29,6 +29,7 @@ export { registerWebSocketBroadcaster, getBridgeEmitter };
  * */
 bridge.adapter({
   emit(name, data) {
+    getBridgeEmitter()?.emit(name, data);
     // 1. 发送到所有 Electron BrowserWindow / Send to all Electron BrowserWindows
     for (let i = 0, len = adapterWindowList.length; i < len; i++) {
       const win = adapterWindowList[i];

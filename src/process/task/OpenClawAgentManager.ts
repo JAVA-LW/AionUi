@@ -89,6 +89,7 @@ class OpenClawAgentManager extends BaseAgentManager<OpenClawAgentManagerData> {
 
   private handleStreamEvent(message: IResponseMessage): void {
     const msg = { ...message, conversation_id: this.conversation_id };
+    cronBusyGuard.touchActivity(this.conversation_id);
 
     // Mark as finished when content is output (visible to user)
     // OpenClaw uses: content, agent_status, acp_tool_call, plan
@@ -123,6 +124,7 @@ class OpenClawAgentManager extends BaseAgentManager<OpenClawAgentManagerData> {
 
     // Handle permission requests
     if (msg.type === 'acp_permission') {
+      cronBusyGuard.touchActivity(this.conversation_id);
       const permissionData = msg.data as {
         sessionId: string;
         toolCall: {
@@ -152,7 +154,10 @@ class OpenClawAgentManager extends BaseAgentManager<OpenClawAgentManagerData> {
 
     // Handle finish event
     if (msg.type === 'finish') {
+      this.status = 'finished';
       cronBusyGuard.setProcessing(this.conversation_id, false);
+    } else {
+      cronBusyGuard.touchActivity(this.conversation_id);
     }
 
     // Emit signal events to frontend
