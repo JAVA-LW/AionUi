@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CodexAgent } from '@process/agent/codex';
+import { CodexAgent } from '@process/agent/codex/core/CodexAgent';
 import type { NetworkError } from '@process/agent/codex/connection/CodexConnection';
 import { CodexEventHandler } from '@process/agent/codex/handlers/CodexEventHandler';
 import { CodexFileOperationHandler } from '@process/agent/codex/handlers/CodexFileOperationHandler';

@@ -14,7 +14,7 @@ import { WorkerTaskManager } from './WorkerTaskManager';
 import { SqliteConversationRepository } from '@process/services/database/SqliteConversationRepository';
 import { GeminiAgentManager } from './GeminiAgentManager';
 import AcpAgentManager from './AcpAgentManager';
-import { CodexAgentManager } from '@process/agent/codex';
+import CodexAgentManager from './CodexAgentManager';
 import OpenClawAgentManager from './OpenClawAgentManager';
 import NanoBotAgentManager from './NanoBotAgentManager';
 
