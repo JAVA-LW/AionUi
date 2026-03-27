@@ -214,11 +214,7 @@ const CronJobDrawer: React.FC<CronJobDrawerProps> = ({
           )
         );
         setSelectedConfigOptionValues(
-          resolveCronInitialConfigValues(
-            nextConfigOptions,
-            undefined,
-            persistedConfig?.configOptionValues
-          )
+          resolveCronInitialConfigValues(nextConfigOptions, undefined, persistedConfig?.configOptionValues)
         );
       } catch (error) {
         console.warn('[CronJobDrawer] Failed to load agent config defaults:', error);
