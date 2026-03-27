@@ -29,6 +29,11 @@ type CallbackJsFilterResult = {
 type CallbackApiJsonResponse = {
   errcode?: unknown;
   errmsg?: unknown;
+  code?: unknown;
+  msg?: unknown;
+  message?: unknown;
+  StatusCode?: unknown;
+  StatusMessage?: unknown;
 };
 
 /**
@@ -222,9 +227,11 @@ jsFilter(input);
     chunkCount: number
   ): Promise<string | null> {
     if (!response.ok) {
+      const responseDetail = await this.extractErrorResponseDetail(response);
+      const baseError = `HTTP ${response.status}: ${response.statusText}`;
       return chunkCount > 1
-        ? `HTTP ${response.status}: ${response.statusText} (chunk ${chunkIndex}/${chunkCount})`
-        : `HTTP ${response.status}: ${response.statusText}`;
+        ? `${baseError}${responseDetail ? ` - ${responseDetail}` : ''} (chunk ${chunkIndex}/${chunkCount})`
+        : `${baseError}${responseDetail ? ` - ${responseDetail}` : ''}`;
     }
 
     const contentType = response.headers?.get('content-type')?.toLowerCase() ?? '';
@@ -263,6 +270,44 @@ jsFilter(input);
     }
 
     return null;
+  }
+
+  private static async extractErrorResponseDetail(response: Response): Promise<string | null> {
+    let responseText = '';
+    try {
+      responseText = await response.text();
+    } catch {
+      return null;
+    }
+
+    const trimmed = responseText.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed) as CallbackApiJsonResponse;
+      const codeCandidates = [parsed.errcode, parsed.code, parsed.StatusCode];
+      const messageCandidates = [parsed.errmsg, parsed.msg, parsed.message, parsed.StatusMessage];
+
+      const code = codeCandidates.find((value) => typeof value === 'number' || typeof value === 'string');
+      const message = messageCandidates.find((value) => typeof value === 'string' && value.trim());
+
+      if (typeof code === 'number' || typeof code === 'string') {
+        if (typeof message === 'string' && message.trim()) {
+          return `code ${String(code)}: ${message.trim()}`;
+        }
+        return `code ${String(code)}`;
+      }
+
+      if (typeof message === 'string' && message.trim()) {
+        return message.trim();
+      }
+    } catch {
+      // Fall back to raw body below when response is not JSON.
+    }
+
+    return trimmed.length > 300 ? `${trimmed.slice(0, 300)}...` : trimmed;
   }
 
   /**
