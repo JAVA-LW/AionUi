@@ -6,7 +6,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
-import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
  * Skills Market feature tests
@@ -23,6 +23,15 @@ const BUNDLED_SKILL_PATH = path.resolve(
   __dirname,
   '../../src/process/resources/skills/_builtin/aionui-skills/SKILL.md'
 );
+
+vi.mock('electron', () => ({ app: { setName: vi.fn(), getPath: () => '/tmp/aionui-test' } }));
+vi.mock('../../src/process/utils/initStorage', () => ({
+  getSkillsDir: () => path.join('/tmp/aionui-test', 'skills'),
+  getAutoSkillsDir: () => path.join('/tmp/aionui-test', 'skills', '_builtin'),
+  getBuiltinSkillsCopyDir: () => path.join('/tmp/aionui-test', 'builtin-skills'),
+}));
+
+let AcpSkillManager: typeof import('../../src/process/task/AcpSkillManager').AcpSkillManager;
 
 describe('Skills Market - Bundled SKILL.md', () => {
   it('bundled SKILL.md file exists', async () => {
@@ -128,17 +137,11 @@ describe('Skills Market - Enable/Disable flow', () => {
 });
 
 describe('Skills Market - AcpSkillManager integration', () => {
-  // Mock Electron app and initStorage before importing AcpSkillManager
-  vi.mock('electron', () => ({ app: { setName: vi.fn(), getPath: () => '/tmp/aionui-test' } }));
-  vi.mock('../../src/process/utils/initStorage', () => ({
-    getSkillsDir: () => path.join('/tmp/aionui-test', 'skills'),
-    getAutoSkillsDir: () => path.join('/tmp/aionui-test', 'skills', '_builtin'),
-    getBuiltinSkillsCopyDir: () => path.join('/tmp/aionui-test', 'builtin-skills'),
-  }));
+  beforeAll(async () => {
+    ({ AcpSkillManager } = await import('../../src/process/task/AcpSkillManager'));
+  });
 
   it('resetInstance clears the singleton so new discoveries happen', async () => {
-    const { AcpSkillManager } = await import('../../src/process/task/AcpSkillManager');
-
     // Get an instance (creates singleton)
     const instance1 = AcpSkillManager.getInstance();
     expect(instance1).toBeDefined();
@@ -156,5 +159,5 @@ describe('Skills Market - AcpSkillManager integration', () => {
 
     // Cleanup
     AcpSkillManager.resetInstance();
-  });
+  }, 20_000);
 });

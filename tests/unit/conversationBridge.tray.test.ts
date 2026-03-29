@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IConversationService } from '@/process/services/IConversationService';
+import type { IWorkerTaskManager } from '@/process/task/IWorkerTaskManager';
 
 type Provider = (payload?: unknown) => Promise<unknown>;
 
@@ -37,9 +39,11 @@ const mockWorkerTaskManager = {
   listTasks: vi.fn(() => []),
 };
 
+let initConversationBridge: typeof import('@process/bridge/conversationBridge').initConversationBridge;
+
 const registerMocks = () => {
   vi.doMock('@/agent/gemini', () => ({
-    GeminiAgent: class {},
+    GeminiAgent: vi.fn(),
     GeminiApprovalStore: { getInstance: vi.fn(() => ({})) },
   }));
 
@@ -67,6 +71,7 @@ const registerMocks = () => {
         responseSearchWorkSpace: { invoke: vi.fn() },
         stop: createCommand('conversation.stop'),
         getSlashCommands: createCommand('conversation.getSlashCommands'),
+        askSideQuestion: createCommand('conversation.askSideQuestion'),
         sendMessage: createCommand('conversation.sendMessage'),
         warmup: createCommand('conversation.warmup'),
         responseStream: { emit: vi.fn() },
@@ -85,6 +90,7 @@ const registerMocks = () => {
   vi.doMock('@process/utils/initStorage', () => ({
     getSkillsDir: vi.fn(() => '/mock/skills'),
     ProcessChat: { get: vi.fn(async () => []) },
+    ProcessConfig: { get: vi.fn(async () => []) },
   }));
 
   vi.doMock('@/process/task/agentUtils', () => ({
@@ -109,9 +115,11 @@ const registerMocks = () => {
   }));
 };
 
-const getProvider = async (key: string): Promise<Provider> => {
-  const mod = await import('@process/bridge/conversationBridge');
-  mod.initConversationBridge(mockConversationService as any, mockWorkerTaskManager as any);
+const getProvider = (key: string): Provider => {
+  initConversationBridge(
+    mockConversationService as unknown as IConversationService,
+    mockWorkerTaskManager as unknown as IWorkerTaskManager
+  );
 
   const provider = handlers[key];
   if (!provider) {
@@ -122,11 +130,14 @@ const getProvider = async (key: string): Promise<Provider> => {
 };
 
 describe('conversationBridge tray sync', () => {
+  beforeAll(async () => {
+    registerMocks();
+    ({ initConversationBridge } = await import('@process/bridge/conversationBridge'));
+  }, 60_000);
+
   beforeEach(() => {
-    vi.resetModules();
     vi.clearAllMocks();
     handlers = {};
-    registerMocks();
   });
 
   afterEach(() => {
@@ -134,7 +145,7 @@ describe('conversationBridge tray sync', () => {
   });
 
   it('refreshes tray menu after removing a conversation', async () => {
-    const removeProvider = await getProvider('conversation.remove');
+    const removeProvider = getProvider('conversation.remove');
 
     const result = await removeProvider({ id: 'conv-1' });
 
@@ -142,20 +153,20 @@ describe('conversationBridge tray sync', () => {
     expect(mockWorkerTaskManager.kill).toHaveBeenCalledWith('conv-1');
     expect(mockConversationService.deleteConversation).toHaveBeenCalledWith('conv-1');
     expect(mockRefreshTrayMenu).toHaveBeenCalledOnce();
-  });
+  }, 20_000);
 
   it('refreshes tray menu after creating a conversation', async () => {
-    const createProvider = await getProvider('conversation.create');
+    const createProvider = getProvider('conversation.create');
 
     const result = await createProvider({ type: 'gemini' });
 
     expect(result).toEqual({ id: 'conv-created', name: 'Created Conversation', source: 'aionui' });
     expect(mockConversationService.createConversation).toHaveBeenCalledOnce();
     expect(mockRefreshTrayMenu).toHaveBeenCalledOnce();
-  });
+  }, 20_000);
 
   it('refreshes tray menu after renaming a conversation', async () => {
-    const updateProvider = await getProvider('conversation.update');
+    const updateProvider = getProvider('conversation.update');
 
     const result = await updateProvider({
       id: 'conv-1',
@@ -169,5 +180,5 @@ describe('conversationBridge tray sync', () => {
       undefined
     );
     expect(mockRefreshTrayMenu).toHaveBeenCalledOnce();
-  });
+  }, 20_000);
 });

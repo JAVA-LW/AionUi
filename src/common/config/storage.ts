@@ -64,6 +64,8 @@ export interface IConfigStorageRefer {
   language: string;
   theme: string;
   colorScheme: string;
+  /** Persisted app-wide UI zoom factor for Display settings */
+  'ui.zoomFactor'?: number;
   /** 桌面模式下是否自动启用 WebUI / Auto-enable WebUI in desktop mode */
   'webui.desktop.enabled'?: boolean;
   /** 桌面模式下是否允许远程访问 / Allow remote access in desktop mode */
@@ -228,6 +230,8 @@ export type TChatConversation =
           pinnedAt?: number;
           /** ACP 后端的 session UUID，用于会话恢复 / ACP backend session UUID for session resume */
           acpSessionId?: string;
+          /** Conversation ID that owns the ACP session / 拥有该 ACP session 的会话 ID */
+          acpSessionConversationId?: string;
           /** ACP session 最后更新时间 / Last update time of ACP session */
           acpSessionUpdatedAt?: number;
           /** Last context usage from usage_update */

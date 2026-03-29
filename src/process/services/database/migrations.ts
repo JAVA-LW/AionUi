@@ -856,24 +856,51 @@ const migration_v17: IMigration = {
 };
 
 /**
- * Migration v17 -> v18: Add schedule_start_at to cron_jobs
+ * Migration v17 -> v18: Add allow_insecure column to remote_agents
  */
 const migration_v18: IMigration = {
   version: 18,
+  name: 'Add allow_insecure column to remote_agents',
+  up: (db) => {
+    const columns = new Set((db.pragma('table_info(remote_agents)') as Array<{ name: string }>).map((c) => c.name));
+    if (!columns.has('allow_insecure')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN allow_insecure INTEGER DEFAULT 0');
+    }
+    console.log('[Migration v18] Added allow_insecure column to remote_agents');
+  },
+  down: (_db) => {
+    // SQLite does not support DROP COLUMN before 3.35.0; skip rollback to prevent data loss.
+    console.warn('[Migration v18] Rollback skipped: cannot drop columns safely.');
+  },
+};
+
+/**
+ * Migration v18 -> v19: Add schedule_start_at to cron_jobs
+ *
+ * Also backfills remote_agents.allow_insecure for users who already ran a
+ * branch-local v18 before this merge, where that version number was consumed
+ * by the cron scheduling migration instead.
+ */
+const migration_v19: IMigration = {
+  version: 19,
   name: 'Add schedule_start_at to cron_jobs',
   up: (db) => {
-    const tableInfo = db.prepare('PRAGMA table_info(cron_jobs)').all() as Array<{ name: string }>;
-    const hasScheduleStartAt = tableInfo.some((col) => col.name === 'schedule_start_at');
-
-    if (!hasScheduleStartAt) {
+    const cronColumns = new Set((db.pragma('table_info(cron_jobs)') as Array<{ name: string }>).map((c) => c.name));
+    if (!cronColumns.has('schedule_start_at')) {
       db.exec('ALTER TABLE cron_jobs ADD COLUMN schedule_start_at INTEGER');
-      console.log('[Migration v18] Added schedule_start_at column to cron_jobs');
+      console.log('[Migration v19] Added schedule_start_at column to cron_jobs');
     } else {
-      console.log('[Migration v18] schedule_start_at already exists, skipping');
+      console.log('[Migration v19] schedule_start_at already exists, skipping');
+    }
+
+    const remoteAgentColumns = new Set((db.pragma('table_info(remote_agents)') as Array<{ name: string }>).map((c) => c.name));
+    if (!remoteAgentColumns.has('allow_insecure')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN allow_insecure INTEGER DEFAULT 0');
+      console.log('[Migration v19] Backfilled allow_insecure column on remote_agents');
     }
   },
   down: (_db) => {
-    console.warn('[Migration v18] Rollback skipped to avoid dropping cron schedule data.');
+    console.warn('[Migration v19] Rollback skipped to avoid dropping cron schedule and remote agent settings data.');
   },
 };
 
@@ -885,6 +912,7 @@ export const ALL_MIGRATIONS: IMigration[] = [
   migration_v1, migration_v2, migration_v3, migration_v4, migration_v5, migration_v6,
   migration_v7, migration_v8, migration_v9, migration_v10, migration_v11, migration_v12,
   migration_v13, migration_v14, migration_v15, migration_v16, migration_v17, migration_v18,
+  migration_v19,
 ];
 
 /**
