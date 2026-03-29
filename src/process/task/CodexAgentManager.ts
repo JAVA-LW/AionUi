@@ -141,7 +141,7 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
 
       // When legacy config has yoloMode=true but user explicitly chose a non-yolo mode
       // on the Guid page, clear the legacy config so it won't re-activate next time.
-      if (legacyYoloMode && data.sessionMode && data.sessionMode !== 'yolo') {
+      if (legacyYoloMode && data.sessionMode && !isCodexAutoApproveMode(data.sessionMode)) {
         void this.clearLegacyYoloConfig();
       }
 
