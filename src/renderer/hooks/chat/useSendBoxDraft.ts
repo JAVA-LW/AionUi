@@ -1,7 +1,6 @@
 import type { TChatConversation } from '@/common/config/storage';
 import { useCallback } from 'react';
 import useSWR from 'swr';
-import useSWRMutation from 'swr/mutation';
 import type { FileOrFolderItem } from '@/renderer/utils/file/fileTypes';
 export type { FileOrFolderItem } from '@/renderer/utils/file/fileTypes';
 
@@ -39,6 +38,18 @@ type Draft =
       content: string;
       atPath: Array<string | FileOrFolderItem>;
       uploadFile: string[];
+    }
+  | {
+      _type: 'remote';
+      content: string;
+      atPath: Array<string | FileOrFolderItem>;
+      uploadFile: string[];
+    }
+  | {
+      _type: 'aionrs';
+      content: string;
+      atPath: Array<string | FileOrFolderItem>;
+      uploadFile: string[];
     };
 
 /**
@@ -54,6 +65,8 @@ const store: SendBoxDraftStore = {
   codex: new Map(),
   'openclaw-gateway': new Map(),
   nanobot: new Map(),
+  remote: new Map(),
+  aionrs: new Map(),
 };
 
 const setDraft = <K extends TChatConversation['type']>(
@@ -98,6 +111,20 @@ const setDraft = <K extends TChatConversation['type']>(
         store.nanobot.delete(conversation_id);
       }
       break;
+    case 'remote':
+      if (draft) {
+        store.remote.set(conversation_id, draft as Extract<Draft, { _type: 'remote' }>);
+      } else {
+        store.remote.delete(conversation_id);
+      }
+      break;
+    case 'aionrs':
+      if (draft) {
+        store.aionrs.set(conversation_id, draft as Extract<Draft, { _type: 'aionrs' }>);
+      } else {
+        store.aionrs.delete(conversation_id);
+      }
+      break;
     default:
       break;
   }
@@ -119,6 +146,10 @@ const getDraft = <K extends TChatConversation['type']>(
       return store['openclaw-gateway'].get(conversation_id) as Extract<Draft, { _type: K }>;
     case 'nanobot':
       return store.nanobot.get(conversation_id) as Extract<Draft, { _type: K }>;
+    case 'remote':
+      return store.remote.get(conversation_id) as Extract<Draft, { _type: K }>;
+    case 'aionrs':
+      return store.aionrs.get(conversation_id) as Extract<Draft, { _type: K }>;
     default:
       return undefined;
   }
@@ -163,34 +194,4 @@ export const getSendBoxDraftHook = <K extends TChatConversation['type']>(
   }
 
   return useDraft;
-};
-
-/**
- * 查询某个对话是否存在草稿
- */
-export const useHasDraft = (conversation_id: string) => {
-  const { data } = useSWR([`/send-box/draft/${conversation_id}`, conversation_id], ([_, id]) => {
-    return Object.values(store).some((draftMap) => draftMap.has(id));
-  });
-
-  return data !== undefined;
-};
-
-/**
- * 删除某个对话的草稿
- */
-export const useDeleteDraft = () => {
-  const { trigger } = useSWRMutation(
-    '/send-box/draft',
-    (_, { arg: { conversation_id } }: { arg: { conversation_id: string } }) => {
-      for (const draftMap of Object.values(store)) {
-        if (draftMap.has(conversation_id)) {
-          return draftMap.delete(conversation_id);
-        }
-      }
-      return false;
-    }
-  );
-
-  return trigger;
 };

@@ -28,6 +28,7 @@ import { initModelBridge } from './modelBridge';
 import { initPreviewHistoryBridge } from './previewHistoryBridge';
 import { initShellBridge } from './shellBridge';
 import { initStarOfficeBridge } from './starOfficeBridge';
+import { initSpeechToTextBridge } from './speechToTextBridge';
 import { initTaskBridge } from './taskBridge';
 import { initUpdateBridge } from './updateBridge';
 import { initWebuiBridge } from './webuiBridge';
@@ -35,14 +36,20 @@ import { initSystemSettingsBridge } from './systemSettingsBridge';
 import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
 import { initPptPreviewBridge } from './pptPreviewBridge';
+import { initOfficeWatchBridge } from './officeWatchBridge';
 import { initExtensionsBridge } from './extensionsBridge';
 import { initWeixinLoginBridge } from './weixinLoginBridge';
+import { initWorkspaceSnapshotBridge } from './workspaceSnapshotBridge';
+import { initRemoteAgentBridge } from './remoteAgentBridge';
+import { initTeamBridge } from './teamBridge';
+import type { TeamSessionService } from '@process/team/TeamSessionService';
 
 export interface BridgeDependencies {
   conversationService: IConversationService;
   conversationRepo: IConversationRepository;
   workerTaskManager: IWorkerTaskManager;
   channelRepo: IChannelRepository;
+  teamSessionService: TeamSessionService;
 }
 
 /**
@@ -66,6 +73,7 @@ export function initAllBridges(deps: BridgeDependencies): void {
   initPreviewHistoryBridge();
   initDocumentBridge();
   initPptPreviewBridge();
+  initOfficeWatchBridge();
   initWindowControlsBridge();
   initUpdateBridge();
   initWebuiBridge();
@@ -77,7 +85,11 @@ export function initAllBridges(deps: BridgeDependencies): void {
   initNotificationBridge();
   initTaskBridge(deps.workerTaskManager);
   initStarOfficeBridge();
+  initSpeechToTextBridge();
   initWeixinLoginBridge();
+  initWorkspaceSnapshotBridge();
+  initRemoteAgentBridge();
+  initTeamBridge(deps.teamSessionService);
 }
 
 /**
@@ -111,16 +123,23 @@ export {
   initMcpBridge,
   initModelBridge,
   initNotificationBridge,
+  initOfficeWatchBridge,
   initPptPreviewBridge,
   initPreviewHistoryBridge,
   initShellBridge,
+  initSpeechToTextBridge,
   initStarOfficeBridge,
   initSystemSettingsBridge,
   initTaskBridge,
   initUpdateBridge,
   initWebuiBridge,
+  initRemoteAgentBridge,
+  initTeamBridge,
   initWindowControlsBridge,
   initWeixinLoginBridge,
+  initWorkspaceSnapshotBridge,
 };
+export { disposeAllSnapshots } from './workspaceSnapshotBridge';
+export { disposeAllTeamSessions } from './teamBridge';
 // 导出窗口控制相关工具函数
 export { registerWindowMaximizeListeners } from './windowControlsBridge';

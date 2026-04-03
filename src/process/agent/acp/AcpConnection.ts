@@ -51,6 +51,56 @@ const execFile = promisify(execFileCb);
 // Re-export for unit tests that import from this module
 export { createGenericSpawnConfig } from './acpConnectors';
 
+/**
+ * Build a user-friendly error message for ACP startup failures.
+ * Detects known error patterns (CLI not found, config errors) and
+ * provides actionable guidance instead of raw stderr.
+ *
+ * Exported for unit testing.
+ */
+export function buildStartupErrorMessage(
+  backend: string,
+  code: number | null,
+  signal: NodeJS.Signals | null,
+  stderrCombined: string,
+  spawnErrorMessage: string | undefined,
+  resolvedBackend: string | null
+): string {
+  let errMsg: string;
+  if (stderrCombined) {
+    errMsg = `${backend} ACP process exited during startup (code: ${code}):\n${stderrCombined}`;
+  } else if (code === 0) {
+    // Exit code 0 with no stderr strongly suggests the CLI version does not support ACP mode
+    errMsg =
+      `${backend} ACP process exited during startup (code: 0). ` +
+      `This usually means the installed ${backend} CLI version does not support ACP mode. ` +
+      `Please upgrade to a newer version that supports ACP.`;
+  } else {
+    errMsg = `${backend} ACP process exited during startup (code: ${code}, signal: ${signal})`;
+  }
+
+  // Detect "command not found" patterns across platforms and provide a clear hint
+  if (
+    code !== 0 &&
+    /not recognized|not found|No such file|command not found|ENOENT/i.test(stderrCombined + (spawnErrorMessage ?? ''))
+  ) {
+    const cliHint = resolvedBackend ?? backend;
+    errMsg = `'${cliHint}' CLI not found. Please install it or update the CLI path in Settings.\n${stderrCombined}`;
+  }
+
+  // Detect CLI config loading errors and provide actionable guidance.
+  // e.g. Codex multi-agent config in config.toml that codex-acp cannot parse.
+  if (code !== 0 && /error loading config/i.test(stderrCombined)) {
+    const configPathMatch = stderrCombined.match(/error loading config:\s*([^\s:]+)/i);
+    const configHint = configPathMatch?.[1] ?? 'the CLI config file';
+    errMsg =
+      `${backend} CLI failed to start due to a config file error. ` +
+      `Please review or temporarily rename ${configHint} and try again.\n${stderrCombined}`;
+  }
+
+  return errMsg;
+}
+
 interface PendingRequest<T = unknown> {
   resolve: (value: T) => void;
   reject: (error: Error) => void;
@@ -59,6 +109,9 @@ interface PendingRequest<T = unknown> {
   isPaused: boolean;
   startTime: number;
   timeoutDuration: number;
+  // Wall-clock timestamp of when this request was first created; never updated.
+  // Used by the keepalive to cap how long it will keep resetting the timeout.
+  promptOriginTime: number;
 }
 
 export class AcpConnection {
@@ -107,6 +160,13 @@ export class AcpConnection {
 
   // Track if child process was spawned with detached: true (needs process group kill)
   private isDetached = false;
+
+  // Periodic keepalive: while a session/prompt is pending, check that the child
+  // process is still alive and reset the timeout timer accordingly.  This prevents
+  // false timeouts when an ACP agent is executing a long-running tool that produces
+  // no streaming output (e.g. a multi-minute build or test suite).
+  private promptKeepaliveInterval: NodeJS.Timeout | null = null;
+  private static readonly KEEPALIVE_INTERVAL_MS = 60_000; // check every 60 s
 
   /**
    * Kill the current child process (if any) and clear process-related state.
@@ -277,6 +337,7 @@ export class AcpConnection {
       case 'qoder':
       case 'vibe':
       case 'cursor':
+      case 'kiro':
         if (!cliPath) {
           throw new Error(`CLI path is required for ${backend} backend`);
         }
@@ -625,22 +686,14 @@ export class AcpConnection {
         // Combine head + tail, deduplicating any overlap
         const stderrCombined =
           stderrHead + (stderrTail && !stderrHead.endsWith(stderrTail) ? '\n…\n' + stderrTail : '');
-        let errMsg: string;
-        if (stderrCombined) {
-          errMsg = `${backend} ACP process exited during startup (code: ${code}):\n${stderrCombined}`;
-        } else {
-          errMsg = `${backend} ACP process exited during startup (code: ${code}, signal: ${signal})`;
-        }
-        // Detect "command not found" patterns across platforms and provide a clear hint
-        if (
-          code !== 0 &&
-          /not recognized|not found|No such file|command not found|ENOENT/i.test(
-            stderrCombined + (spawnError?.message ?? '')
-          )
-        ) {
-          const cliHint = this.backend ?? backend;
-          errMsg = `'${cliHint}' CLI not found. Please install it or update the CLI path in Settings.\n${stderrCombined}`;
-        }
+        const errMsg = buildStartupErrorMessage(
+          backend,
+          code,
+          signal,
+          stderrCombined,
+          spawnError?.message,
+          this.backend
+        );
         if (code !== 0 && !spawnError) {
           spawnError = new Error(errMsg);
         }
@@ -724,6 +777,7 @@ export class AcpConnection {
    * Similar to Codex's handleProcessExit implementation
    */
   private handleProcessExit(code: number | null, signal: NodeJS.Signals | null): void {
+    this.stopPromptKeepalive();
     // 1. Reject all pending requests with clear error message
     for (const [_id, request] of this.pendingRequests) {
       if (request.timeoutId) {
@@ -788,6 +842,7 @@ export class AcpConnection {
         isPaused: false,
         startTime,
         timeoutDuration,
+        promptOriginTime: startTime,
       };
 
       this.pendingRequests.set(id, pendingRequest);
@@ -825,23 +880,19 @@ export class AcpConnection {
   }
 
   // 恢复指定请求的超时计时器
+  // Reset startTime so the full timeout budget restarts after a permission pause.
+  // Without this, long permission waits cause immediate timeout on resume.
   private resumeRequestTimeout(requestId: number): void {
     const request = this.pendingRequests.get(requestId);
     if (request && request.isPaused) {
-      const elapsedTime = Date.now() - request.startTime;
-      const remainingTime = Math.max(0, request.timeoutDuration - elapsedTime);
-
-      if (remainingTime > 0) {
-        request.timeoutId = setTimeout(() => {
-          if (this.pendingRequests.has(requestId) && !request.isPaused) {
-            this.handlePromptTimeout(requestId, request);
-          }
-        }, remainingTime);
-        request.isPaused = false;
-      } else {
-        // 时间已超过，立即触发超时
-        this.handlePromptTimeout(requestId, request);
-      }
+      request.startTime = Date.now();
+      request.promptOriginTime = Date.now();
+      request.timeoutId = setTimeout(() => {
+        if (this.pendingRequests.has(requestId) && !request.isPaused) {
+          this.handlePromptTimeout(requestId, request);
+        }
+      }, request.timeoutDuration);
+      request.isPaused = false;
     }
   }
 
@@ -882,6 +933,50 @@ export class AcpConnection {
           }
         }, request.timeoutDuration);
       }
+    }
+  }
+
+  /**
+   * Returns true only if the child process is confirmed to still be running.
+   * Checks exitCode and signalCode in addition to killed, because killed is
+   * only set when the process is terminated via Node's .kill() — a naturally
+   * crashing child leaves killed=false until the exit event is processed.
+   * exitCode/signalCode are set by the runtime as soon as the process exits,
+   * so they reliably detect a dead child even before the exit event fires.
+   */
+  private isChildAlive(): boolean {
+    return this.child !== null && !this.child.killed && this.child.exitCode === null && this.child.signalCode === null;
+  }
+
+  /**
+   * Start a periodic keepalive that resets prompt timeout timers as long as
+   * the child process is still alive.  This complements the streaming-based
+   * reset in resetSessionPromptTimeouts(): when the agent is executing a
+   * silent tool (no session.update emitted), the keepalive prevents a false
+   * timeout while the process-exit handler covers the case where the child
+   * actually crashes.
+   */
+  private startPromptKeepalive(): void {
+    this.stopPromptKeepalive();
+    this.promptKeepaliveInterval = setInterval(() => {
+      if (!this.isChildAlive()) return;
+      // Only reset timeouts for requests that are still within their original
+      // wall-clock budget (promptOriginTime + timeoutDuration). This prevents
+      // a hung process from being kept alive indefinitely by the keepalive.
+      const now = Date.now();
+      const hasEligibleRequest = [...this.pendingRequests.values()].some(
+        (r) => r.method === 'session/prompt' && now - r.promptOriginTime < r.timeoutDuration
+      );
+      if (hasEligibleRequest) {
+        this.resetSessionPromptTimeouts();
+      }
+    }, AcpConnection.KEEPALIVE_INTERVAL_MS);
+  }
+
+  private stopPromptKeepalive(): void {
+    if (this.promptKeepaliveInterval) {
+      clearInterval(this.promptKeepaliveInterval);
+      this.promptKeepaliveInterval = null;
     }
   }
 
@@ -1221,10 +1316,15 @@ export class AcpConnection {
     this.firstChunkReceived = false;
     if (ACP_PERF_LOG) console.log(`[ACP-PERF] send: prompt sent to ${this.backend}`);
 
-    return await this.sendRequest('session/prompt', {
-      sessionId: this.sessionId,
-      prompt: [{ type: 'text', text: prompt }],
-    });
+    this.startPromptKeepalive();
+    try {
+      return await this.sendRequest('session/prompt', {
+        sessionId: this.sessionId,
+        prompt: [{ type: 'text', text: prompt }],
+      });
+    } finally {
+      this.stopPromptKeepalive();
+    }
   }
 
   /**
@@ -1328,6 +1428,7 @@ export class AcpConnection {
   }
 
   async disconnect(): Promise<void> {
+    this.stopPromptKeepalive();
     await this.terminateChild();
 
     // Reset session-level state

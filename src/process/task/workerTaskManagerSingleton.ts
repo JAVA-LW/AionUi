@@ -17,6 +17,8 @@ import AcpAgentManager from './AcpAgentManager';
 import CodexAgentManager from './CodexAgentManager';
 import OpenClawAgentManager from './OpenClawAgentManager';
 import NanoBotAgentManager from './NanoBotAgentManager';
+import RemoteAgentManager from './RemoteAgentManager';
+import { AionrsManager } from './AionrsManager';
 
 const agentFactory = new AgentFactory();
 
@@ -35,6 +37,10 @@ agentFactory.register('acp', (conv, opts) => {
     ...c.extra,
     conversation_id: c.id,
     yoloMode: opts?.yoloMode,
+    // Use persisted user override if available, otherwise fall back to the channel's
+    // configured model (c.model.useModel). This ensures gemini-cli and other non-claude
+    // backends apply the correct model at session start.
+    currentModelId: c.extra?.currentModelId ?? c.model?.useModel,
   }) as unknown as ReturnType<typeof agentFactory.create>;
 });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,7 +50,7 @@ agentFactory.register('codex', (conv, opts) => {
     ...c.extra,
     conversation_id: c.id,
     yoloMode: opts?.yoloMode,
-    sessionMode: c.extra.sessionMode,
+    sessionMode: c.extra?.sessionMode,
   }) as unknown as ReturnType<typeof agentFactory.create>;
 });
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -64,6 +70,25 @@ agentFactory.register('nanobot', (conv, opts) => {
     conversation_id: c.id,
     yoloMode: opts?.yoloMode,
   }) as unknown as ReturnType<typeof agentFactory.create>;
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+agentFactory.register('remote', (conv, opts) => {
+  const c = conv as any;
+  return new RemoteAgentManager({
+    ...c.extra,
+    conversation_id: c.id,
+    yoloMode: opts?.yoloMode,
+  }) as unknown as ReturnType<typeof agentFactory.create>;
+});
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+agentFactory.register('aionrs', (conv, opts) => {
+  const c = conv as any;
+  return new AionrsManager(
+    { ...c.extra, conversation_id: c.id, yoloMode: opts?.yoloMode },
+    c.model
+  ) as unknown as ReturnType<typeof agentFactory.create>;
 });
 
 const conversationRepo = new SqliteConversationRepository();

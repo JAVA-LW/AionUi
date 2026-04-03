@@ -22,6 +22,7 @@ import { useCustomAgentsLoader } from './useCustomAgentsLoader';
 export type GuidAgentSelectionResult = {
   selectedAgentKey: string;
   setSelectedAgentKey: (key: string) => void;
+  defaultAgentKey: string;
   selectedAgent: AcpBackend | 'custom';
   selectedAgentInfo: AvailableAgent | undefined;
   isPresetAgent: boolean;
@@ -70,7 +71,7 @@ export const useGuidAgentSelection = ({
   isGoogleAuth,
   localeKey,
 }: UseGuidAgentSelectionOptions): GuidAgentSelectionResult => {
-  const [selectedAgentKey, _setSelectedAgentKey] = useState<string>('gemini');
+  const [selectedAgentKey, _setSelectedAgentKey] = useState<string>('aionrs');
   const [availableAgents, setAvailableAgents] = useState<AvailableAgent[]>();
   const [selectedMode, _setSelectedMode] = useState<string>('default');
   // Track whether mode was loaded from preferences to avoid overwriting during initial load
@@ -168,7 +169,7 @@ export const useGuidAgentSelection = ({
 
   /**
    * Find agent by key.
-   * Supports both "custom:uuid" format and plain backend type.
+   * Supports "custom:uuid", "remote:uuid" format, and plain backend type.
    */
   const findAgentByKey = (key: string): AvailableAgent | undefined => {
     if (key.startsWith('custom:')) {
@@ -190,11 +191,19 @@ export const useGuidAgentSelection = ({
         };
       }
     }
+    if (key.startsWith('remote:')) {
+      const remoteId = key.slice(7);
+      return availableAgents?.find((a) => a.backend === 'remote' && a.customAgentId === remoteId);
+    }
     return availableAgents?.find((a) => a.backend === key);
   };
 
   // Derived state
-  const selectedAgent = selectedAgentKey.startsWith('custom:') ? ('custom' as const) : (selectedAgentKey as AcpBackend);
+  const selectedAgent = selectedAgentKey.startsWith('custom:')
+    ? ('custom' as const)
+    : selectedAgentKey.startsWith('remote:')
+      ? ('remote' as AcpBackend)
+      : (selectedAgentKey as AcpBackend);
   const selectedAgentInfo = useMemo(
     () => findAgentByKey(selectedAgentKey),
     [selectedAgentKey, availableAgents, customAgents]
@@ -223,11 +232,19 @@ export const useGuidAgentSelection = ({
     return [];
   });
 
+  // Fetch remote agents from DB and merge into available agents
+  const { data: remoteAgentsData } = useSWR('remote-agents.list', () => ipcBridge.remoteAgent.list.invoke());
+
   useEffect(() => {
-    if (availableAgentsData) {
-      setAvailableAgents(availableAgentsData);
-    }
-  }, [availableAgentsData]);
+    if (!availableAgentsData) return;
+    const remoteAsAvailable: AvailableAgent[] = (remoteAgentsData || []).map((ra) => ({
+      backend: 'remote' as AcpBackend,
+      name: ra.name,
+      customAgentId: ra.id,
+      avatar: ra.avatar,
+    }));
+    setAvailableAgents([...availableAgentsData, ...remoteAsAvailable]);
+  }, [availableAgentsData, remoteAgentsData]);
 
   // Load last selected agent
   useEffect(() => {
@@ -238,16 +255,21 @@ export const useGuidAgentSelection = ({
     const loadLastSelectedAgent = async () => {
       try {
         const savedAgentKey = await ConfigStorage.get('guid.lastSelectedAgent');
-        if (cancelled || !savedAgentKey) return;
+        if (cancelled) return;
 
-        const isInAvailable = availableAgents.some((agent) => {
-          const key =
-            agent.backend === 'custom' && agent.customAgentId ? `custom:${agent.customAgentId}` : agent.backend;
-          return key === savedAgentKey;
-        });
+        if (savedAgentKey) {
+          const isInAvailable = availableAgents.some((agent) => getAgentKey(agent) === savedAgentKey);
+          if (isInAvailable) {
+            _setSelectedAgentKey(savedAgentKey);
+            return;
+          }
+        }
 
-        if (isInAvailable) {
-          _setSelectedAgentKey(savedAgentKey);
+        // No saved preference or saved agent no longer available — default to first agent
+        const firstAgent = availableAgents[0];
+        if (firstAgent) {
+          const firstKey = getAgentKey(firstAgent);
+          _setSelectedAgentKey(firstKey);
         }
       } catch (error) {
         console.error('Failed to load last selected agent:', error);
@@ -516,9 +538,16 @@ export const useGuidAgentSelection = ({
     }
   }, [availableAgents, currentEffectiveAgentInfo, selectedAgent]);
 
+  // Key of the first non-preset CLI agent (used as fallback when leaving preset mode)
+  const defaultAgentKey = useMemo(() => {
+    const firstCliAgent = availableAgents?.find((a) => !a.isPreset);
+    return firstCliAgent ? getAgentKey(firstCliAgent) : 'aionrs';
+  }, [availableAgents]);
+
   return {
     selectedAgentKey,
     setSelectedAgentKey,
+    defaultAgentKey,
     selectedAgent,
     selectedAgentInfo,
     isPresetAgent,

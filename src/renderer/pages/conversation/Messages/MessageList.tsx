@@ -30,9 +30,13 @@ import MessageTips from './components/MessageTips';
 import MessageToolCall from './components/MessageToolCall';
 import MessageToolGroup from './components/MessageToolGroup';
 import MessageToolGroupSummary from './components/MessageToolGroupSummary';
+import MessageCronTrigger from './components/MessageCronTrigger';
+import MessageSkillSuggest from './components/MessageSkillSuggest';
 import MessageText from './components/MessagetText';
+import MessageThinking from './components/MessageThinking';
 import type { WriteFileResult } from './types';
 import { useAutoScroll } from './useAutoScroll';
+import { useAutoPreviewOfficeFiles } from '@/renderer/hooks/file/useAutoPreviewOfficeFiles';
 
 type TurnDiffContent = Extract<CodexToolCallUpdate, { subtype: 'turn_diff' }>;
 
@@ -128,6 +132,12 @@ const MessageItem: React.FC<{ message: TMessage; highlighted?: boolean }> = Reac
         return <MessageCodexToolCall message={message}></MessageCodexToolCall>;
       case 'plan':
         return <MessagePlan message={message}></MessagePlan>;
+      case 'thinking':
+        return <MessageThinking message={message}></MessageThinking>;
+      case 'skill_suggest':
+        return <MessageSkillSuggest message={message} />;
+      case 'cron_trigger':
+        return <MessageCronTrigger message={message} />;
       case 'available_commands':
         return null;
       default:
@@ -145,6 +155,7 @@ const MessageItem: React.FC<{ message: TMessage; highlighted?: boolean }> = Reac
 const MessageList: React.FC<{ className?: string }> = () => {
   const list = useMessageList();
   const conversationContext = useConversationContextSafe();
+  useAutoPreviewOfficeFiles(conversationContext?.workspace);
   const { t } = useTranslation();
   const location = useLocation();
   const locationState = (location.state || {}) as ConversationLocationState;
@@ -193,7 +204,8 @@ const MessageList: React.FC<{ className?: string }> = () => {
 
     for (let i = 0, len = list.length; i < len; i++) {
       const message = list[i];
-      // Skip available_commands messages
+      // Skip hidden and available_commands messages
+      if (message.hidden) continue;
       if (message.type === 'available_commands') continue;
       if (message.type === 'codex_tool_call' && message.content.subtype === 'turn_diff') {
         pushFileDffChanges(parseDiff((message.content as TurnDiffContent).data.unified_diff), message.id);
@@ -234,6 +246,7 @@ const MessageList: React.FC<{ className?: string }> = () => {
   // Use auto-scroll hook
   const {
     virtuosoRef,
+    handleScrollerRef,
     handleScroll,
     handleAtBottomStateChange,
     handleFollowOutput,
@@ -346,11 +359,13 @@ const MessageList: React.FC<{ className?: string }> = () => {
         <ImagePreviewContext.Provider value={{ inPreviewGroup: true }}>
           <Virtuoso
             ref={virtuosoRef}
+            scrollerRef={handleScrollerRef}
             className='flex-1 h-full pb-10px box-border'
             data={processedList}
             initialTopMostItemIndex={processedList.length - 1}
+            defaultItemHeight={40}
             atBottomThreshold={100}
-            increaseViewportBy={200}
+            increaseViewportBy={1200}
             itemContent={renderItem}
             followOutput={handleFollowOutput}
             onScroll={handleScroll}

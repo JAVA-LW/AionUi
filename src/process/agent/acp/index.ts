@@ -104,8 +104,16 @@ export interface AcpAgentConfig {
     agentName?: string;
     /** ACP session ID for resume support / ACP session ID 用于会话恢复 */
     acpSessionId?: string;
+    /** Conversation ID that owns the ACP session / 拥有该 ACP session 的会话 ID */
+    acpSessionConversationId?: string;
     /** Last update time of ACP session / ACP session 最后更新时间 */
     acpSessionUpdatedAt?: number;
+    /** Initial model ID to apply at session start (from channel config or persisted user choice) */
+    currentModelId?: string;
+    /** Initial session mode to apply at session start (e.g., acceptEdits, auto, dontAsk, plan) */
+    sessionMode?: string;
+    /** Team MCP server stdio config injected by TeamSessionService */
+    teamMcpStdioConfig?: { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
   };
   onStreamEvent: (data: IResponseMessage) => void;
   onPromptUsage?: (usage: AcpPromptResponseUsage) => void;
@@ -118,6 +126,7 @@ export interface AcpAgentConfig {
 
 // ACP agent任务类
 export class AcpAgent {
+  private expectedDisconnectReason: 'idle_timeout' | null = null;
   private readonly id: string;
   private extra: {
     workspace?: string;
@@ -131,8 +140,16 @@ export class AcpAgent {
     agentName?: string;
     /** ACP session ID for resume support / ACP session ID 用于会话恢复 */
     acpSessionId?: string;
+    /** Conversation ID that owns the ACP session / 拥有该 ACP session 的会话 ID */
+    acpSessionConversationId?: string;
     /** Last update time of ACP session / ACP session 最后更新时间 */
     acpSessionUpdatedAt?: number;
+    /** Initial model ID to apply at session start (from channel config or persisted user choice) */
+    currentModelId?: string;
+    /** Initial session mode to apply at session start (e.g., acceptEdits, auto, dontAsk, plan) */
+    sessionMode?: string;
+    /** Team MCP server stdio config injected by TeamSessionService */
+    teamMcpStdioConfig?: { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
   };
   private connection: AcpConnection;
   private adapter: AcpAdapter;
@@ -217,6 +234,10 @@ export class AcpAgent {
     this.connection.onDisconnect = (error) => {
       this.handleDisconnect(error);
     };
+  }
+
+  setExpectedDisconnectReason(reason: 'idle_timeout' | null): void {
+    this.expectedDisconnectReason = reason;
   }
 
   /**
@@ -338,18 +359,12 @@ export class AcpAgent {
         };
         const sessionMode = yoloModeMap[this.extra.backend];
         if (sessionMode) {
-          try {
-            const modeStart = Date.now();
-            await this.connection.setSessionMode(sessionMode);
-            if (ACP_PERF_LOG) console.log(`[ACP-PERF] start: session mode set ${Date.now() - modeStart}ms`);
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new Error(
-              `[ACP] Failed to enable ${this.extra.backend} YOLO mode (${sessionMode}): ${errorMessage}`,
-              { cause: error }
-            );
-          }
+          await this.applySessionMode(sessionMode, true, `${this.extra.backend} YOLO mode`);
         }
+      } else if (this.extra.sessionMode && this.extra.sessionMode !== 'default') {
+        // Apply non-default, non-YOLO session mode (e.g., acceptEdits, auto, dontAsk, plan)
+        // so the CLI backend reflects the mode selected by the user on the Guid page.
+        await this.applySessionMode(this.extra.sessionMode, false, `session mode`);
       }
 
       // Apply model from ~/.claude/settings.json for Claude backend.
@@ -380,6 +395,16 @@ export class AcpAgent {
             }
           }
         }
+      } else if (this.extra.currentModelId) {
+        // For non-claude backends (e.g. gemini-cli), apply the model configured in
+        // channel settings or persisted from a prior user model switch.
+        try {
+          await this.connection.setModel(this.extra.currentModelId);
+        } catch (error) {
+          console.warn(
+            `[ACP] Failed to set model "${this.extra.currentModelId}": ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
       }
 
       // Emit initial model info after session setup completes
@@ -391,6 +416,26 @@ export class AcpAgent {
       if (ACP_PERF_LOG) console.log(`[ACP-PERF] start: failed after ${Date.now() - startTotal}ms`);
       this.emitStatusMessage('error');
       throw error;
+    }
+  }
+
+  /**
+   * Apply a session mode via the ACP connection.
+   * @param mode   The mode string to set (e.g., 'bypassPermissions', 'acceptEdits').
+   * @param fatal  If true, throw on failure (YOLO — must succeed); if false, warn and continue.
+   * @param label  Human-readable label for log messages (e.g., 'claude YOLO mode').
+   */
+  private async applySessionMode(mode: string, fatal: boolean, label: string): Promise<void> {
+    try {
+      const modeStart = Date.now();
+      await this.connection.setSessionMode(mode);
+      if (ACP_PERF_LOG) console.log(`[ACP-PERF] start: session mode set ${Date.now() - modeStart}ms`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (fatal) {
+        throw new Error(`[ACP] Failed to enable ${label} (${mode}): ${msg}`, { cause: error });
+      }
+      console.warn(`[ACP] Failed to set session mode "${mode}": ${msg}`);
     }
   }
 
@@ -599,6 +644,7 @@ export class AcpAgent {
       });
 
       this.adapter.resetMessageTracking();
+      this.adapter.resetPlanTracking();
       let processedContent = data.content;
 
       // Add @ prefix to ALL uploaded files (including images) with FULL PATH
@@ -1098,12 +1144,16 @@ export class AcpAgent {
         return;
       }
 
-      setTimeout(() => {
-        if (this.pendingPermissions.has(requestId)) {
-          this.pendingPermissions.delete(requestId);
-          reject(new Error('Permission request timed out'));
-        }
-      }, 70000);
+      // In team mode, wait indefinitely for leader to approve (like Claude).
+      // In standalone mode, allow up to 30 minutes to respond to permission prompts.
+      if (!this.extra.teamMcpStdioConfig) {
+        setTimeout(() => {
+          if (this.pendingPermissions.has(requestId)) {
+            this.pendingPermissions.delete(requestId);
+            reject(new Error('Permission request timed out'));
+          }
+        }, 1800000);
+      }
     });
   }
 
@@ -1152,10 +1202,14 @@ export class AcpAgent {
     this.emitStatusMessage('disconnected');
 
     // 2. Emit error message with helpful information
+    const disconnectReason = this.expectedDisconnectReason;
+    this.expectedDisconnectReason = null;
     const errorMsg =
-      `${this.extra.backend} process disconnected unexpectedly ` +
-      `(code: ${error.code}, signal: ${error.signal}). ` +
-      `Please try sending a new message to reconnect.`;
+      disconnectReason === 'idle_timeout'
+        ? 'Session closed after 30 minutes of inactivity. Send a new message to reconnect.'
+        : `${this.extra.backend} process disconnected unexpectedly ` +
+          `(code: ${error.code}, signal: ${error.signal}). ` +
+          `Please try sending a new message to reconnect.`;
     this.emitErrorMessage(errorMsg);
 
     // 3. Emit finish signal to reset UI loading state
@@ -1177,37 +1231,71 @@ export class AcpAgent {
   }
 
   private handleFileOperation(operation: { method: string; path: string; content?: string; sessionId: string }): void {
-    // 创建文件操作消息显示在UI中
-    const fileOperationMessage: TMessage = {
-      id: uuid(),
-      conversation_id: this.id,
-      type: 'text',
-      position: 'left',
-      createdAt: Date.now(),
-      content: {
-        content: this.formatFileOperationMessage(operation),
-      },
-    };
-
-    this.emitMessage(fileOperationMessage);
+    this.emitMessage(this.createFileOperationToolCall(operation));
   }
 
-  private formatFileOperationMessage(operation: {
+  private createFileOperationToolCall(operation: {
     method: string;
     path: string;
     content?: string;
     sessionId: string;
-  }): string {
-    switch (operation.method) {
-      case 'fs/write_text_file': {
-        const content = operation.content || '';
-        return `📝 File written: \`${operation.path}\`\n\n\`\`\`\n${content}\n\`\`\``;
-      }
+  }): TMessage {
+    const toolCallId = uuid();
+    const contentPreview =
+      operation.method === 'fs/write_text_file' && operation.content
+        ? [
+            {
+              type: 'content' as const,
+              content: {
+                type: 'text' as const,
+                text: this.formatFileOperationPreview(operation.content),
+              },
+            },
+          ]
+        : undefined;
+
+    return {
+      id: toolCallId,
+      msg_id: toolCallId,
+      conversation_id: this.id,
+      type: 'acp_tool_call',
+      position: 'left',
+      createdAt: Date.now(),
+      content: {
+        sessionId: operation.sessionId,
+        update: {
+          sessionUpdate: 'tool_call',
+          toolCallId,
+          status: 'completed',
+          title: this.getFileOperationTitle(operation.method),
+          kind: operation.method === 'fs/read_text_file' ? 'read' : 'edit',
+          rawInput: {
+            file_path: operation.path,
+            method: operation.method,
+          },
+          content: contentPreview,
+          locations: [{ path: operation.path }],
+        },
+      },
+    };
+  }
+
+  private getFileOperationTitle(method: string): string {
+    switch (method) {
+      case 'fs/write_text_file':
+        return 'File Write';
       case 'fs/read_text_file':
-        return `📖 File read: \`${operation.path}\``;
+        return 'File Read';
       default:
-        return `🔧 File operation: \`${operation.path}\``;
+        return 'File Operation';
     }
+  }
+
+  private formatFileOperationPreview(content: string): string {
+    if (content.length <= 500) {
+      return content;
+    }
+    return content.slice(0, 500) + '\n... (truncated)';
   }
 
   private emitStatusMessage(
@@ -1349,7 +1437,6 @@ export class AcpAgent {
         // Distinguish between thought messages and error messages
         if (message.content.type === 'warning' && message.position === 'center') {
           const subject = this.extractThoughtSubject(message.content.content);
-
           responseMessage.type = 'thought';
           responseMessage.data = {
             subject,
@@ -1417,12 +1504,16 @@ export class AcpAgent {
    */
   private async createOrResumeSession(): Promise<void> {
     const resumeSessionId = this.extra.acpSessionId;
+    const resumeConversationId = this.extra.acpSessionConversationId;
     const mcpServers = await this.loadBuiltinSessionMcpServers();
 
-    // If we have a stored session ID, attempt to resume it.
-    // Resume can fail when the ACP bridge package changed (e.g. claude-code-acp → claude-agent-acp)
-    // or the session simply expired. In that case, fall back to creating a fresh session.
-    if (resumeSessionId) {
+    // Validate session ownership: only resume if the stored session belongs to this conversation.
+    if (resumeSessionId && resumeConversationId && resumeConversationId !== this.id) {
+      console.warn(
+        `[AcpAgent] Session ${resumeSessionId} belongs to conversation ${resumeConversationId}, ` +
+          `but current conversation is ${this.id}. Discarding stale session and starting fresh.`
+      );
+    } else if (resumeSessionId) {
       try {
         let response: { sessionId?: string };
 
@@ -1463,22 +1554,34 @@ export class AcpAgent {
   private async loadBuiltinSessionMcpServers(): Promise<AcpSessionMcpServer[]> {
     try {
       const mcpConfig = await ProcessConfig.get('mcp.config');
-      if (!Array.isArray(mcpConfig) || mcpConfig.length === 0) {
-        return [];
+      const servers: AcpSessionMcpServer[] = [];
+
+      if (Array.isArray(mcpConfig) && mcpConfig.length > 0) {
+        const capabilities = parseAcpMcpCapabilities(this.connection.getInitializeResponse());
+        servers.push(...buildBuiltinAcpSessionMcpServers(mcpConfig as IMcpServer[], capabilities));
       }
 
-      const capabilities = parseAcpMcpCapabilities(this.connection.getInitializeResponse());
-      const sessionMcpServers = buildBuiltinAcpSessionMcpServers(mcpConfig as IMcpServer[], capabilities);
+      // Inject team MCP server if this agent belongs to a team (stdio mode)
+      const teamMcpStdioConfig = this.extra.teamMcpStdioConfig;
+      if (teamMcpStdioConfig && teamMcpStdioConfig.command) {
+        servers.push({
+          name: teamMcpStdioConfig.name,
+          command: teamMcpStdioConfig.command,
+          args: teamMcpStdioConfig.args,
+          env: teamMcpStdioConfig.env,
+        });
+        mainLog(`[ACP ${this.extra.backend}]`, `Injecting team MCP server (stdio): ${teamMcpStdioConfig.name}`);
+      }
 
-      if (sessionMcpServers.length > 0) {
+      if (servers.length > 0) {
         mainLog(
           `[ACP ${this.extra.backend}]`,
-          `Injecting ${sessionMcpServers.length} built-in MCP server(s) into session bootstrap`,
-          sessionMcpServers.map((server) => `${server.name}:${server.type}`)
+          `Injecting ${servers.length} MCP server(s) into session/new`,
+          servers.map((server) => `${server.name}:${'type' in server ? server.type : 'stdio'}`)
         );
       }
 
-      return sessionMcpServers;
+      return servers;
     } catch (error) {
       console.warn(
         `[ACP ${this.extra.backend}] Failed to load built-in MCP config for session/new:`,
@@ -1497,7 +1600,10 @@ export class AcpAgent {
    */
   async setMode(mode: string): Promise<{ success: boolean; error?: string }> {
     if (!this.connection.isConnected || !this.connection.hasActiveSession) {
-      return { success: false, error: 'No active session. Please send a message first to establish a session.' };
+      // No live session — persist the mode so it takes effect on next session start.
+      // AcpAgentManager reads extra.sessionMode during startSession().
+      this.extra.sessionMode = mode;
+      return { success: true };
     }
     try {
       await this.connection.setSessionMode(mode);

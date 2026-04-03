@@ -86,6 +86,8 @@ export class ChannelManager {
       this.sessionManager = new SessionManager();
       this.serviceRegistry = new ChannelServiceRegistry();
       this.registerCoreServices();
+      await this.sessionManager.ready;
+      await this.sessionManager.ready;
       this.pluginManager = new PluginManager(this.sessionManager);
 
       // Create action executor and wire up message handling

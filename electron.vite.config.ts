@@ -98,9 +98,9 @@ export default defineConfig(({ mode }) => {
             // splitting places it in a chunks/ subdirectory.
             gemini: resolve('src/process/worker/gemini.ts'),
             acp: resolve('src/process/worker/acp.ts'),
-            codex: resolve('src/process/worker/codex.ts'),
             'openclaw-gateway': resolve('src/process/worker/openclaw-gateway.ts'),
             nanobot: resolve('src/process/worker/nanobot.ts'),
+            aionrs: resolve('src/process/worker/aionrs.ts'),
             // Built-in MCP server entry points
             'builtin-mcp-image-gen': resolve('src/process/resources/builtinMcp/imageGenServer.ts'),
           },
@@ -111,6 +111,7 @@ export default defineConfig(({ mode }) => {
         },
       },
       define: {
+        'process.env.NODE_ENV': JSON.stringify(mode),
         'process.env.env': JSON.stringify(process.env.env),
         'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN ?? ''),
       },
@@ -131,17 +132,17 @@ export default defineConfig(({ mode }) => {
 
     renderer: {
       base: './',
+      publicDir: resolve('public'),
       server: {
-        // Keep renderer HTTP port deterministic for Electron runtime URL injection.
-        // If 5173 is unavailable, fail fast instead of auto-switching to 5174+,
-        // which causes renderer resource requests to target the wrong origin.
+        // Default to 5173; when occupied (e.g. another AionUi clone is running),
+        // Vite auto-increments to the next available port.
+        // electron-vite reads the actual port and sets ELECTRON_RENDERER_URL accordingly.
         port: 5173,
-        strictPort: true,
-        // Explicit HMR config so Vite client connects directly to the Vite dev server,
-        // not to the WebUI proxy server (which would reject the WebSocket and cause infinite reload)
+        // Explicit HMR host so Vite client connects directly to the Vite dev server,
+        // not to the WebUI proxy server (which would reject the WebSocket and cause infinite reload).
+        // Port is omitted so it automatically matches the server port.
         hmr: {
           host: 'localhost',
-          port: 5173,
         },
       },
       resolve: {
@@ -172,6 +173,10 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: { index: resolve('src/renderer/index.html') },
           external: ['node:crypto', 'crypto'],
+          onwarn(warning, warn) {
+            if (warning.code === 'EVAL') return;
+            warn(warning);
+          },
           output: {
             manualChunks(id: string) {
               if (!id.includes('node_modules')) return undefined;
@@ -210,6 +215,7 @@ export default defineConfig(({ mode }) => {
       },
       define: {
         'process.env.env': JSON.stringify(process.env.env),
+        'process.env.AIONUI_MULTI_INSTANCE': JSON.stringify(process.env.AIONUI_MULTI_INSTANCE ?? ''),
         'process.env.SENTRY_DSN': JSON.stringify(process.env.SENTRY_DSN ?? ''),
         global: 'globalThis',
       },

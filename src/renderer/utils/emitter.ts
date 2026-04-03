@@ -15,6 +15,10 @@ interface EventTypes {
   'gemini.selected.file.append': [Array<string | FileOrFolderItem>];
   'gemini.selected.file.clear': void;
   'gemini.workspace.refresh': void;
+  'aionrs.selected.file': [Array<string | FileOrFolderItem>];
+  'aionrs.selected.file.append': [Array<string | FileOrFolderItem>];
+  'aionrs.selected.file.clear': void;
+  'aionrs.workspace.refresh': void;
   'acp.selected.file': [Array<string | FileOrFolderItem>];
   'acp.selected.file.append': [Array<string | FileOrFolderItem>];
   'acp.selected.file.clear': void;
@@ -31,6 +35,10 @@ interface EventTypes {
   'nanobot.selected.file.append': [Array<string | FileOrFolderItem>];
   'nanobot.selected.file.clear': void;
   'nanobot.workspace.refresh': void;
+  'remote.selected.file': [Array<string | FileOrFolderItem>];
+  'remote.selected.file.append': [Array<string | FileOrFolderItem>];
+  'remote.selected.file.clear': void;
+  'remote.workspace.refresh': void;
   'chat.history.refresh': void;
   // 会话删除事件 / Conversation deletion event
   'conversation.deleted': [string]; // conversationId

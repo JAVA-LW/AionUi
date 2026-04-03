@@ -5,6 +5,7 @@
  */
 
 import type { AcpBackend, AcpBackendAll, AcpBackendConfig } from '@/common/types/acpTypes';
+import type { SpeechToTextConfig } from '@/common/types/speech';
 import { storage } from '@office-ai/platform';
 
 /**
@@ -66,6 +67,8 @@ export interface IConfigStorageRefer {
   language: string;
   theme: string;
   colorScheme: string;
+  /** Persisted app-wide UI zoom factor for Display settings */
+  'ui.zoomFactor'?: number;
   /** 桌面模式下是否自动启用 WebUI / Auto-enable WebUI in desktop mode */
   'webui.desktop.enabled'?: boolean;
   /** 桌面模式下是否允许远程访问 / Allow remote access in desktop mode */
@@ -80,8 +83,11 @@ export interface IConfigStorageRefer {
     /** @deprecated Image generation is now controlled via built-in MCP server toggle */
     switch?: boolean;
   };
+  'tools.speechToText'?: SpeechToTextConfig;
   // 是否在粘贴文件到工作区时询问确认（true = 不再询问）
   'workspace.pasteConfirm'?: boolean;
+  // 上传的文件是否保存到工作区目录（true = 保存到工作区，false = 保存到缓存目录）
+  'upload.saveToWorkspace'?: boolean;
   // guid 页面上次选择的 agent 类型 / Last selected agent type on guid page
   'guid.lastSelectedAgent'?: string;
   // 迁移标记：修复老版本中助手 enabled 默认值问题 / Migration flag: fix assistant enabled default value issue
@@ -101,6 +107,8 @@ export interface IConfigStorageRefer {
   'system.notificationEnabled'?: boolean;
   // 定时任务完成时显示系统通知 / Show system notification when scheduled task completes
   'system.cronNotificationEnabled'?: boolean;
+  // 阻止系统休眠以保证定时任务执行 / Prevent system sleep to ensure scheduled tasks run
+  'system.keepAwake'?: boolean;
   // Telegram assistant default model / Telegram 助手默认模型
   'assistant.telegram.defaultModel'?: {
     id: string;
@@ -221,6 +229,8 @@ export type TChatConversation =
         sessionMode?: string;
         /** Explicit marker for temporary health-check conversations */
         isHealthCheck?: boolean;
+        /** Cron job ID that spawned this conversation */
+        cronJobId?: string;
       }
     >
   | Omit<
@@ -244,6 +254,8 @@ export type TChatConversation =
           pinnedAt?: number;
           /** ACP 后端的 session UUID，用于会话恢复 / ACP backend session UUID for session resume */
           acpSessionId?: string;
+          /** Conversation ID that owns the ACP session / 拥有该 ACP session 的会话 ID */
+          acpSessionConversationId?: string;
           /** ACP session 最后更新时间 / Last update time of ACP session */
           acpSessionUpdatedAt?: number;
           /** Last context usage from usage_update */
@@ -257,6 +269,8 @@ export type TChatConversation =
           configOptionValues?: Record<string, string>;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
+          /** Cron job ID that spawned this conversation */
+          cronJobId?: string;
         }
       >,
       'model'
@@ -284,6 +298,8 @@ export type TChatConversation =
           codexModel?: string;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
+          /** Cron job ID that spawned this conversation */
+          cronJobId?: string;
         }
       >,
       'model'
@@ -327,6 +343,8 @@ export type TChatConversation =
           pinnedAt?: number;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
+          /** Cron job ID that spawned this conversation */
+          cronJobId?: string;
         }
       >,
       'model'
@@ -347,9 +365,67 @@ export type TChatConversation =
           pinnedAt?: number;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
+          /** Cron job ID that spawned this conversation */
+          cronJobId?: string;
         }
       >,
       'model'
+    >
+  | Omit<
+      IChatConversation<
+        'remote',
+        {
+          workspace?: string;
+          customWorkspace?: boolean;
+          /** Remote agent config ID (FK to remote_agents table) */
+          remoteAgentId: string;
+          /** Remote session key for resume */
+          sessionKey?: string;
+          /** Enabled skills list */
+          enabledSkills?: string[];
+          /** Preset assistant ID */
+          presetAssistantId?: string;
+          /** Whether this conversation is pinned */
+          pinned?: boolean;
+          /** Pin timestamp in milliseconds */
+          pinnedAt?: number;
+          /** Explicit marker for temporary health-check conversations */
+          isHealthCheck?: boolean;
+          /** Cron job ID that spawned this conversation */
+          cronJobId?: string;
+        }
+      >,
+      'model'
+    >
+  | IChatConversation<
+      'aionrs',
+      {
+        workspace: string;
+        customWorkspace?: boolean;
+        proxy?: string;
+        /** System rules injected at initialization */
+        presetRules?: string;
+        /** Enabled skills list */
+        enabledSkills?: string[];
+        /** Preset assistant ID */
+        presetAssistantId?: string;
+        /** Whether this conversation is pinned */
+        pinned?: boolean;
+        /** Pin timestamp in milliseconds */
+        pinnedAt?: number;
+        /** Max tokens per response */
+        maxTokens?: number;
+        /** Max agentic turns */
+        maxTurns?: number;
+        /** Persisted session mode for resume support */
+        sessionMode?: string;
+        /** Explicit marker for temporary health-check conversations */
+        isHealthCheck?: boolean;
+        /** Last token usage stats */
+        lastTokenUsage?: TokenUsageData;
+        /** Cron job ID that spawned this conversation */
+        cronJobId?: string;
+      }
     >;
 
 export type IChatConversationRefer = {

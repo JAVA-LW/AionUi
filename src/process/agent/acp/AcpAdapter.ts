@@ -24,6 +24,7 @@ export class AcpAdapter {
   private backend: AcpBackend;
   private activeToolCalls: Map<string, IMessageAcpToolCall> = new Map();
   private currentMessageId: string | null = uuid(); // Track current message for streaming chunks
+  private currentPlanMsgId: string | null = null; // Stable id for plan within a turn
 
   constructor(conversationId: string, backend: AcpBackend) {
     this.conversationId = conversationId;
@@ -36,6 +37,13 @@ export class AcpAdapter {
    */
   resetMessageTracking() {
     this.currentMessageId = uuid();
+  }
+
+  /**
+   * Reset plan tracking for a new turn (called when user sends a new message)
+   */
+  resetPlanTracking() {
+    this.currentPlanMsgId = null;
   }
 
   /**
@@ -68,14 +76,15 @@ export class AcpAdapter {
       }
 
       case 'agent_thought_chunk': {
+        // Reset message tracking so content after thinking gets a new msg_id,
+        // ensuring the thinking message appears above subsequent content in the UI
+        this.resetMessageTracking();
         if (update.content) {
           const message = this.convertThoughtChunk(update);
           if (message) {
             messages.push(message);
           }
         }
-        // Reset message tracking for next agent_message_chunk
-        this.resetMessageTracking();
         break;
       }
 
@@ -84,8 +93,6 @@ export class AcpAdapter {
         if (toolCallMessage) {
           messages.push(toolCallMessage);
         }
-        // Reset message tracking so next agent_message_chunk gets new msg_id
-        this.resetMessageTracking();
         break;
       }
 
@@ -94,8 +101,6 @@ export class AcpAdapter {
         if (toolCallUpdateMessage) {
           messages.push(toolCallUpdateMessage);
         }
-        // Reset message tracking so next agent_message_chunk gets new msg_id
-        this.resetMessageTracking();
         break;
       }
 
@@ -104,8 +109,6 @@ export class AcpAdapter {
         if (planMessage) {
           messages.push(planMessage);
         }
-        // Reset message tracking so next agent_message_chunk gets new msg_id
-        this.resetMessageTracking();
         break;
       }
 
@@ -118,8 +121,11 @@ export class AcpAdapter {
 
       // Disabled: available_commands messages are too noisy and distracting in the chat UI
       case 'available_commands_update':
-        // Still reset message tracking so next agent_message_chunk gets new msg_id
-        this.resetMessageTracking();
+        break;
+
+      // User message chunks are echoed back during session/load restore.
+      // They are already displayed from local DB, so ignore them silently.
+      case 'user_message_chunk':
         break;
 
       default: {
@@ -261,9 +267,13 @@ export class AcpAdapter {
    * Convert plan update to AionUI message
    */
   private convertPlanUpdate(update: PlanUpdate): IMessagePlan | null {
+    // Reuse the same msg_id within a turn so plan updates merge into one message
+    if (!this.currentPlanMsgId) {
+      this.currentPlanMsgId = uuid();
+    }
     const baseMessage = {
-      id: uuid(),
-      msg_id: uuid(), // 生成独立的 msg_id，避免与其他消息合并
+      id: this.currentPlanMsgId,
+      msg_id: this.currentPlanMsgId,
       conversation_id: this.conversationId,
       createdAt: Date.now(),
       position: 'left' as const,

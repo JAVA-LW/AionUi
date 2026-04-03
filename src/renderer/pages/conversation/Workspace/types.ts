@@ -17,7 +17,7 @@ export type MessageApi = ReturnType<typeof Message.useMessage>[0];
 export interface WorkspaceProps {
   workspace: string;
   conversation_id: string;
-  eventPrefix?: 'gemini' | 'acp' | 'codex';
+  eventPrefix?: 'gemini' | 'acp' | 'codex' | 'aionrs';
   messageApi?: MessageApi;
 }
 
@@ -103,3 +103,5 @@ export type ExtractNodeDataFn = (node: NodeInstance | null | undefined) => IDirO
 export type ExtractNodeKeyFn = (node: NodeInstance | null | undefined) => string | null;
 export type GetPathSeparatorFn = (targetPath: string) => string;
 export type FindNodeByKeyFn = (list: IDirOrFile[], key: string) => IDirOrFile | null;
+
+export type WorkspaceTab = 'files' | 'changes';

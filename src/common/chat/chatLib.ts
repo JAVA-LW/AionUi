@@ -76,7 +76,10 @@ type TMessageType =
   | 'codex_permission'
   | 'codex_tool_call'
   | 'plan'
-  | 'available_commands';
+  | 'thinking'
+  | 'available_commands'
+  | 'skill_suggest'
+  | 'cron_trigger';
 
 interface IMessage<T extends TMessageType, Content extends Record<string, any>> {
   /**
@@ -110,6 +113,10 @@ interface IMessage<T extends TMessageType, Content extends Record<string, any>> 
    * 消息状态
    */
   status?: 'finish' | 'pending' | 'error' | 'work';
+  /**
+   * Hidden from UI display but persisted to DB and sent to agent.
+   */
+  hidden?: boolean;
 }
 
 export type CronMessageMeta = {
@@ -119,7 +126,16 @@ export type CronMessageMeta = {
   triggeredAt: number;
 };
 
-export type IMessageText = IMessage<'text', { content: string; cronMeta?: CronMessageMeta }>;
+export type IMessageText = IMessage<
+  'text',
+  {
+    content: string;
+    cronMeta?: CronMessageMeta;
+    teammateMessage?: boolean;
+    senderName?: string;
+    senderAgentType?: string;
+  }
+>;
 
 export type IMessageTips = IMessage<'tips', { content: string; type: 'error' | 'success' | 'warning' }>;
 
@@ -292,6 +308,16 @@ export type IMessagePlan = IMessage<
   }
 >;
 
+export type IMessageThinking = IMessage<
+  'thinking',
+  {
+    content: string;
+    subject?: string;
+    duration?: number;
+    status: 'thinking' | 'done';
+  }
+>;
+
 // Available commands from ACP agents (Claude, etc.)
 export type AvailableCommand = {
   name: string;
@@ -303,6 +329,26 @@ export type IMessageAvailableCommands = IMessage<
   'available_commands',
   {
     commands: AvailableCommand[];
+  }
+>;
+
+export type IMessageSkillSuggest = IMessage<
+  'skill_suggest',
+  {
+    cronJobId: string;
+    name: string;
+    description: string;
+    /** Full SKILL.md content (including frontmatter) */
+    skillContent: string;
+  }
+>;
+
+export type IMessageCronTrigger = IMessage<
+  'cron_trigger',
+  {
+    cronJobId: string;
+    cronJobName: string;
+    triggeredAt: number;
   }
 >;
 
@@ -318,7 +364,10 @@ export type TMessage =
   | IMessageCodexPermission
   | IMessageCodexToolCall
   | IMessagePlan
-  | IMessageAvailableCommands;
+  | IMessageThinking
+  | IMessageAvailableCommands
+  | IMessageSkillSuggest
+  | IMessageCronTrigger;
 
 // 统一所有需要用户交互的用户类型
 export interface IConfirmation<Option = unknown> {
@@ -373,6 +422,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
               cronMeta: (data as { cronMeta?: CronMessageMeta }).cronMeta,
             }
           : { content: data as string },
+        ...(message.hidden && { hidden: true }),
       };
     }
     case 'tool_call': {
@@ -454,12 +504,65 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         content: message.data as any,
       };
     }
+    case 'thinking': {
+      const data = message.data as {
+        content: string;
+        subject?: string;
+        duration?: number;
+        status: 'thinking' | 'done';
+      };
+      return {
+        id: uuid(),
+        type: 'thinking',
+        msg_id: message.msg_id,
+        position: 'left',
+        conversation_id: message.conversation_id,
+        content: {
+          content: data.content,
+          subject: data.subject,
+          duration: data.duration,
+          status: data.status,
+        },
+      };
+    }
     // Disabled: available_commands messages are too noisy and distracting in the chat UI
     case 'available_commands':
       break;
+    case 'skill_suggest': {
+      const suggestData = message.data as {
+        cronJobId: string;
+        name: string;
+        description: string;
+        skillContent: string;
+      };
+      return {
+        id: uuid(),
+        type: 'skill_suggest',
+        msg_id: message.msg_id,
+        conversation_id: message.conversation_id,
+        position: 'center',
+        content: suggestData,
+      };
+    }
+    case 'cron_trigger': {
+      const triggerData = message.data as {
+        cronJobId: string;
+        cronJobName: string;
+        triggeredAt: number;
+      };
+      return {
+        id: uuid(),
+        type: 'cron_trigger',
+        msg_id: message.msg_id,
+        conversation_id: message.conversation_id,
+        position: 'center',
+        content: triggerData,
+      };
+    }
     case 'start':
     case 'finish':
     case 'thought':
+    case 'info': // Stream retry notifications and similar transient agent updates
     case 'system': // Cron system responses, ignored
     case 'acp_model_info': // Model info updates, handled by AcpModelSelector
     case 'codex_model_info': // Codex model info updates, handled by AcpModelSelector
@@ -598,6 +701,32 @@ export const composeMessage = (
     }
     return pushMessage(message);
     // If no existing plan found, add new one
+  }
+
+  // Handle thinking message merging — append streaming content by msg_id
+  if (message.type === 'thinking') {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const msg = list[i];
+      if (msg.type === 'thinking' && msg.msg_id === message.msg_id) {
+        // If incoming is 'done', update status and duration but keep accumulated content
+        if (message.content.status === 'done') {
+          const merged = {
+            ...msg.content,
+            status: message.content.status as 'done',
+            duration: message.content.duration,
+          };
+          return updateMessage(i, { ...msg, content: merged });
+        }
+        // Otherwise append content
+        const merged = {
+          ...msg.content,
+          content: msg.content.content + message.content.content,
+          subject: message.content.subject || msg.content.subject,
+        };
+        return updateMessage(i, { ...msg, content: merged });
+      }
+    }
+    return pushMessage(message);
   }
 
   if (last.msg_id !== message.msg_id || last.type !== message.type) {

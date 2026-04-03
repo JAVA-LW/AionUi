@@ -1024,6 +1024,362 @@ const migration_v20: IMigration = {
 };
 
 /**
+ * Migration v20 -> v21: Add remote_agents table + 'remote' to conversations type
+ */
+const migration_v21: IMigration = {
+  version: 21,
+  name: 'Add remote_agents table and remote conversation type',
+  up: (db) => {
+    // 1. Create remote_agents table
+    db.exec(`CREATE TABLE IF NOT EXISTS remote_agents (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        protocol TEXT NOT NULL DEFAULT 'openclaw',
+        url TEXT NOT NULL,
+        auth_type TEXT NOT NULL DEFAULT 'bearer',
+        auth_token TEXT,
+        avatar TEXT,
+        description TEXT,
+        status TEXT DEFAULT 'unknown',
+        last_connected_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_remote_agents_protocol ON remote_agents(protocol)');
+
+    // 2. Recreate conversations with 'remote' added to type CHECK
+    db.exec(`CREATE TABLE IF NOT EXISTS conversations_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('gemini', 'acp', 'codex', 'openclaw-gateway', 'nanobot', 'remote')),
+        extra TEXT NOT NULL,
+        model TEXT,
+        status TEXT CHECK(status IN ('pending', 'running', 'finished')),
+        source TEXT,
+        channel_chat_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+    db.exec(`INSERT INTO conversations_new (id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at)
+      SELECT id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at FROM conversations`);
+    db.exec('DROP TABLE conversations');
+    db.exec('ALTER TABLE conversations_new RENAME TO conversations');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at DESC)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source_updated ON conversations(source, updated_at DESC)');
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_source_chat ON conversations(source, channel_chat_id, updated_at DESC)'
+    );
+
+    console.log('[Migration v21] Added remote_agents table and remote conversation type');
+  },
+  down: (db) => {
+    db.exec('DROP INDEX IF EXISTS idx_remote_agents_protocol');
+    db.exec('DROP TABLE IF EXISTS remote_agents');
+    console.log('[Migration v21] Rolled back: Removed remote_agents table');
+  },
+};
+
+/**
+ * Migration v21 -> v22: Add device identity columns to remote_agents
+ */
+const migration_v22: IMigration = {
+  version: 22,
+  name: 'Add device identity columns to remote_agents',
+  up: (db) => {
+    const columns = new Set((db.pragma('table_info(remote_agents)') as Array<{ name: string }>).map((c) => c.name));
+    if (!columns.has('device_id')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN device_id TEXT');
+    }
+    if (!columns.has('device_public_key')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN device_public_key TEXT');
+    }
+    if (!columns.has('device_private_key')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN device_private_key TEXT');
+    }
+    if (!columns.has('device_token')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN device_token TEXT');
+    }
+    console.log('[Migration v22] Added device identity columns to remote_agents');
+  },
+  down: (_db) => {
+    // SQLite does not support DROP COLUMN before 3.35.0; skip rollback to prevent data loss.
+    console.warn('[Migration v22] Rollback skipped: cannot drop columns safely.');
+  },
+};
+
+/**
+ * Migration v22 -> v23: Add allow_insecure column to remote_agents
+ */
+const migration_v23: IMigration = {
+  version: 23,
+  name: 'Add allow_insecure column to remote_agents',
+  up: (db) => {
+    const columns = new Set((db.pragma('table_info(remote_agents)') as Array<{ name: string }>).map((c) => c.name));
+    if (!columns.has('allow_insecure')) {
+      db.exec('ALTER TABLE remote_agents ADD COLUMN allow_insecure INTEGER DEFAULT 0');
+    }
+    console.log('[Migration v23] Added allow_insecure column to remote_agents');
+  },
+  down: (_db) => {
+    // SQLite does not support DROP COLUMN before 3.35.0; skip rollback to prevent data loss.
+    console.warn('[Migration v23] Rollback skipped: cannot drop columns safely.');
+  },
+};
+
+/**
+ * Migration v23 -> v24: Add teams table for Team mode
+ *
+ * NOTE: This migration intentionally omits `lead_agent_id`. That column was
+ * added in v25 via ALTER TABLE. Users who upgrade directly to v25+ get the
+ * column via the v25 migration; the omission here is a known historical gap,
+ * not a bug. Do NOT add `lead_agent_id` here — it would conflict with v25.
+ */
+const migration_v24: IMigration = {
+  version: 24,
+  name: 'Add teams table',
+  up: (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      workspace TEXT NOT NULL,
+      workspace_mode TEXT NOT NULL DEFAULT 'shared',
+      agents TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_teams_user_id ON teams(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_teams_updated_at ON teams(updated_at)');
+  },
+  down: (db) => {
+    db.exec('DROP INDEX IF EXISTS idx_teams_updated_at');
+    db.exec('DROP INDEX IF EXISTS idx_teams_user_id');
+    db.exec('DROP TABLE IF EXISTS teams');
+  },
+};
+
+const migration_v25: IMigration = {
+  version: 25,
+  name: 'Add lead_agent_id to teams, create mailbox and team_tasks tables',
+  up: (db) => {
+    // Ensure teams table exists (v19 should have created it, but guard against
+    // dev databases where v19 ran without the teams migration content)
+    db.exec(`CREATE TABLE IF NOT EXISTS teams (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      workspace TEXT NOT NULL,
+      workspace_mode TEXT NOT NULL DEFAULT 'shared',
+      agents TEXT NOT NULL DEFAULT '[]',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_teams_user_id ON teams(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_teams_updated_at ON teams(updated_at)');
+
+    // Add lead_agent_id column (ignore if already exists from a prior v19 run)
+    try {
+      db.exec(`ALTER TABLE teams ADD COLUMN lead_agent_id TEXT NOT NULL DEFAULT ''`);
+    } catch {
+      // Column already exists — safe to ignore
+    }
+    db.exec(`CREATE TABLE IF NOT EXISTS mailbox (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      to_agent_id TEXT NOT NULL,
+      from_agent_id TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'message',
+      content TEXT NOT NULL,
+      summary TEXT,
+      read INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_mailbox_to ON mailbox(team_id, to_agent_id, read)');
+    db.exec(`CREATE TABLE IF NOT EXISTS team_tasks (
+      id TEXT PRIMARY KEY,
+      team_id TEXT NOT NULL,
+      subject TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      owner TEXT,
+      blocked_by TEXT NOT NULL DEFAULT '[]',
+      blocks TEXT NOT NULL DEFAULT '[]',
+      metadata TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE
+    )`);
+    db.exec('CREATE INDEX IF NOT EXISTS idx_tasks_team ON team_tasks(team_id, status)');
+  },
+  down: (db) => {
+    // SQLite does not support DROP COLUMN; leave lead_agent_id in place
+    db.exec('DROP INDEX IF EXISTS idx_tasks_team');
+    db.exec('DROP TABLE IF EXISTS team_tasks');
+    db.exec('DROP INDEX IF EXISTS idx_mailbox_to');
+    db.exec('DROP TABLE IF EXISTS mailbox');
+  },
+};
+
+/**
+ * Migration v25 -> v26: Add 'aionrs' to conversations type CHECK constraint
+ */
+const migration_v26: IMigration = {
+  version: 26,
+  name: "Add 'aionrs' to conversations type CHECK",
+  up: (db) => {
+    db.exec(`CREATE TABLE IF NOT EXISTS conversations_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('gemini', 'acp', 'codex', 'openclaw-gateway', 'nanobot', 'remote', 'aionrs')),
+        extra TEXT NOT NULL,
+        model TEXT,
+        status TEXT CHECK(status IN ('pending', 'running', 'finished')),
+        source TEXT,
+        channel_chat_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+    db.exec(`INSERT INTO conversations_new (id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at)
+      SELECT id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at FROM conversations`);
+    db.exec('DROP TABLE conversations');
+    db.exec('ALTER TABLE conversations_new RENAME TO conversations');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at DESC)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source_updated ON conversations(source, updated_at DESC)');
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_source_chat ON conversations(source, channel_chat_id, updated_at DESC)'
+    );
+    console.log("[Migration v26] Added 'aionrs' to conversations type CHECK");
+  },
+  down: (db) => {
+    // Remove aionrs conversations before copying to table with stricter constraint
+    db.exec(`DELETE FROM messages WHERE conversation_id IN (SELECT id FROM conversations WHERE type = 'aionrs')`);
+    db.exec(`DELETE FROM conversations WHERE type = 'aionrs'`);
+
+    db.exec(`CREATE TABLE IF NOT EXISTS conversations_rollback (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL CHECK(type IN ('gemini', 'acp', 'codex', 'openclaw-gateway', 'nanobot', 'remote')),
+        extra TEXT NOT NULL,
+        model TEXT,
+        status TEXT CHECK(status IN ('pending', 'running', 'finished')),
+        source TEXT,
+        channel_chat_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+    db.exec(`INSERT INTO conversations_rollback (id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at)
+      SELECT id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at FROM conversations`);
+    db.exec('DROP TABLE conversations');
+    db.exec('ALTER TABLE conversations_rollback RENAME TO conversations');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at DESC)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source_updated ON conversations(source, updated_at DESC)');
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_source_chat ON conversations(source, channel_chat_id, updated_at DESC)'
+    );
+
+    console.log("[Migration v26] Rolled back: Removed 'aionrs' from conversations type CHECK");
+  },
+};
+
+/**
+ * Migration v26 -> v27: Remove CHECK constraint on conversations.type,
+ * add cron job columns, hidden messages, and cronJobId index.
+ *
+ * The CHECK(type IN (...)) constraint forced a heavy table-rebuild migration
+ * every time a new agent type was added (v10, v11, v14, v15, v16, v21 all did this).
+ * By removing the constraint, new agent types only need TypeScript-level changes
+ * (TChatConversation union + rowToConversation branch) — no database migration.
+ */
+const migration_v27: IMigration = {
+  version: 27,
+  name: 'Remove type CHECK, add cron columns, hidden messages',
+  up: (db) => {
+    // 1. Remove CHECK constraint on conversations.type
+    db.exec(`CREATE TABLE IF NOT EXISTS conversations_new (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        type TEXT NOT NULL,
+        extra TEXT NOT NULL,
+        model TEXT,
+        status TEXT CHECK(status IN ('pending', 'running', 'finished')),
+        source TEXT,
+        channel_chat_id TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )`);
+    db.exec(`INSERT INTO conversations_new (id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at)
+      SELECT id, user_id, name, type, extra, model, status, source, channel_chat_id, created_at, updated_at FROM conversations`);
+    db.exec('DROP TABLE conversations');
+    db.exec('ALTER TABLE conversations_new RENAME TO conversations');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_type ON conversations(type)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_user_updated ON conversations(user_id, updated_at DESC)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source ON conversations(source)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_conversations_source_updated ON conversations(source, updated_at DESC)');
+    db.exec(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_source_chat ON conversations(source, channel_chat_id, updated_at DESC)'
+    );
+    db.exec(
+      `CREATE INDEX IF NOT EXISTS idx_conversations_cron_job_id ON conversations(json_extract(extra, '$.cronJobId'))`
+    );
+
+    // 2. Add cron job columns (execution_mode, agent_config)
+    const cronColumns = new Set((db.pragma('table_info(cron_jobs)') as Array<{ name: string }>).map((c) => c.name));
+    if (!cronColumns.has('execution_mode')) {
+      db.exec(`ALTER TABLE cron_jobs ADD COLUMN execution_mode TEXT DEFAULT 'existing'`);
+    }
+    if (!cronColumns.has('agent_config')) {
+      db.exec(`ALTER TABLE cron_jobs ADD COLUMN agent_config TEXT`);
+    }
+    // Fix legacy jobs: empty conversation_id means they were created before execution_mode existed
+    db.exec(
+      `UPDATE cron_jobs SET execution_mode = 'new_conversation' WHERE conversation_id = '' OR conversation_id IS NULL`
+    );
+
+    // 3. Add hidden column to messages
+    const msgColumns = new Set((db.pragma('table_info(messages)') as Array<{ name: string }>).map((c) => c.name));
+    if (!msgColumns.has('hidden')) {
+      db.exec(`ALTER TABLE messages ADD COLUMN hidden INTEGER DEFAULT 0`);
+    }
+
+    const cronScheduleColumns = new Set((db.pragma('table_info(cron_jobs)') as Array<{ name: string }>).map((c) => c.name));
+    if (!cronScheduleColumns.has('schedule_start_at')) {
+      db.exec(`ALTER TABLE cron_jobs ADD COLUMN schedule_start_at INTEGER`);
+    }
+
+    console.log('[Migration v27] Removed type CHECK, added cron columns, hidden messages');
+  },
+  down: (_db) => {
+    // Cannot safely rollback — re-adding CHECK would reject unknown types already in the table.
+    console.warn('[Migration v27] Rollback skipped: re-adding CHECK constraint could reject existing data.');
+  },
+};
+
+/**
  * All migrations in order
  */
 // prettier-ignore
@@ -1031,7 +1387,8 @@ export const ALL_MIGRATIONS: IMigration[] = [
   migration_v1, migration_v2, migration_v3, migration_v4, migration_v5, migration_v6,
   migration_v7, migration_v8, migration_v9, migration_v10, migration_v11, migration_v12,
   migration_v13, migration_v14, migration_v15, migration_v16, migration_v17, migration_v18, migration_v19,
-  migration_v20,
+  migration_v20, migration_v21, migration_v22, migration_v23, migration_v24, migration_v25, migration_v26,
+  migration_v27,
 ];
 
 /**

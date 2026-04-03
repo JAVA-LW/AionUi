@@ -18,7 +18,7 @@
  * 预设助手的主 Agent 类型，用于决定创建哪种类型的对话
  * The primary agent type for preset assistants, used to determine which conversation type to create.
  */
-export type PresetAgentType = 'gemini' | 'claude' | 'codex' | 'codebuddy' | 'opencode' | 'qwen';
+export type PresetAgentType = 'gemini' | 'claude' | 'codex' | 'codebuddy' | 'opencode' | 'qwen' | 'kiro';
 
 /**
  * 使用 ACP 协议的预设 Agent 类型（需要通过 ACP 后端路由）
@@ -33,6 +33,7 @@ export const ACP_ROUTED_PRESET_TYPES: readonly PresetAgentType[] = [
   'opencode',
   'codex',
   'qwen',
+  'kiro',
 ] as const;
 
 export const CODEX_ACP_BRIDGE_VERSION = '0.9.5';
@@ -41,7 +42,8 @@ export const CODEX_ACP_NPX_PACKAGE = `@zed-industries/codex-acp@${CODEX_ACP_BRID
 export const CLAUDE_ACP_BRIDGE_VERSION = '0.21.0';
 export const CLAUDE_ACP_NPX_PACKAGE = `@zed-industries/claude-agent-acp@${CLAUDE_ACP_BRIDGE_VERSION}`;
 
-export const CODEBUDDY_ACP_NPX_PACKAGE = '@tencent-ai/codebuddy-code';
+export const CODEBUDDY_ACP_BRIDGE_VERSION = '2.70.1';
+export const CODEBUDDY_ACP_NPX_PACKAGE = `@tencent-ai/codebuddy-code@${CODEBUDDY_ACP_BRIDGE_VERSION}`;
 
 /**
  * 检查预设 Agent 类型是否需要通过 ACP 后端路由
@@ -70,6 +72,9 @@ export type AcpBackendAll =
   | 'vibe' // Mistral Vibe CLI
   | 'nanobot' // nanobot CLI
   | 'cursor' // Cursor AI Agent CLI
+  | 'kiro' // Kiro CLI (AWS)
+  | 'remote' // Remote agent (WebSocket, no local CLI)
+  | 'aionrs' // Aion CLI agent (Rust binary, JSON Lines protocol)
   | 'custom'; // User-configured custom ACP agent
 
 /**
@@ -106,10 +111,10 @@ function generatePotentialAcpClis(): PotentialAcpCli[] {
   // Must be called after ACP_BACKENDS_ALL is defined, so use lazy initialization
   return Object.entries(ACP_BACKENDS_ALL)
     .filter(([id, config]) => {
-      // 排除没有 CLI 命令的后端（gemini 内置，custom 用户配置）
-      // Exclude backends without CLI command (gemini is built-in, custom is user-configured)
+      // 排除没有 CLI 命令的后端（gemini 内置，custom 用户配置，aionrs 非 ACP 类型）
+      // Exclude backends without CLI command (gemini is built-in, custom is user-configured, aionrs is not ACP type)
       if (!config.cliCommand) return false;
-      if (id === 'gemini' || id === 'custom') return false;
+      if (id === 'gemini' || id === 'custom' || id === 'aionrs') return false;
       return config.enabled;
     })
     .map(([id, config]) => ({
@@ -251,6 +256,17 @@ export interface AcpBackendConfig {
    */
   acpArgs?: string[];
 
+  /**
+   * 原生 skill 发现目录（相对于 workspace 根目录）
+   * 只有配置了此字段的 CLI 才支持原生 skill 发现（CLI 自动扫描目录中的 SKILL.md）
+   * 未配置的 backend 将 fallback 到首条消息注入（prompt injection）
+   *
+   * Native skill discovery directories (relative to workspace root).
+   * Only CLIs with this field support native skill discovery (CLI auto-scans directory for SKILL.md).
+   * Backends without this field will fallback to first-message injection (prompt injection).
+   */
+  skillsDirs?: string[];
+
   /** 是否为基于提示词的预设（无需 CLI 二进制文件）/ Whether this is a prompt-based preset (no CLI binary required) */
   isPreset?: boolean;
 
@@ -325,6 +341,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     authRequired: true,
     enabled: true,
     supportsStreaming: false,
+    skillsDirs: ['.claude/skills'],
   },
   gemini: {
     id: 'gemini',
@@ -333,6 +350,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     authRequired: true,
     enabled: false,
     supportsStreaming: true,
+    skillsDirs: ['.gemini/skills'],
   },
   qwen: {
     id: 'qwen',
@@ -343,6 +361,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ 已验证支持：Qwen CLI v0.0.10+ 支持 --acp
     supportsStreaming: true,
     acpArgs: ['--acp'], // Use --acp instead of deprecated --experimental-acp
+    skillsDirs: ['.qwen/skills'],
   },
   iflow: {
     id: 'iflow',
@@ -351,6 +370,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     authRequired: true,
     enabled: true,
     supportsStreaming: false,
+    skillsDirs: ['.iflow/skills'],
   },
   codex: {
     id: 'codex',
@@ -361,6 +381,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Codex via codex-acp ACP bridge
     supportsStreaming: false,
     acpArgs: [], // codex-acp is ACP by default, no flag needed
+    skillsDirs: ['.codex/skills'],
   },
   codebuddy: {
     id: 'codebuddy',
@@ -371,6 +392,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Tencent CodeBuddy Code CLI，使用 `codebuddy --acp` 启动
     supportsStreaming: false,
     acpArgs: ['--acp'], // codebuddy 使用 --acp flag
+    skillsDirs: ['.codebuddy/skills'],
   },
   goose: {
     id: 'goose',
@@ -380,6 +402,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Block's Goose CLI，使用 `goose acp` 启动
     supportsStreaming: false,
     acpArgs: ['acp'], // goose 使用子命令而非 flag
+    skillsDirs: ['.goose/skills'],
   },
   auggie: {
     id: 'auggie',
@@ -398,6 +421,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Kimi CLI (Moonshot)，使用 `kimi acp` 启动
     supportsStreaming: false,
     acpArgs: ['acp'], // kimi 使用 acp 子命令
+    skillsDirs: ['.kimi/skills'],
   },
   opencode: {
     id: 'opencode',
@@ -417,6 +441,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Factory docs: `droid exec --output-format acp` (JetBrains/Zed ACP integration)
     supportsStreaming: false,
     acpArgs: ['exec', '--output-format', 'acp'],
+    skillsDirs: ['.factory/skills'],
   },
   copilot: {
     id: 'copilot',
@@ -444,6 +469,7 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Mistral Vibe CLI，使用 `vibe-acp` 启动
     supportsStreaming: false,
     acpArgs: [],
+    skillsDirs: ['.vibe/skills'],
   },
   'openclaw-gateway': {
     id: 'openclaw-gateway',
@@ -472,6 +498,32 @@ export const ACP_BACKENDS_ALL: Record<AcpBackendAll, AcpBackendConfig> = {
     enabled: true, // ✅ Cursor AI Agent CLI, launched via `agent acp`
     supportsStreaming: false,
     acpArgs: ['acp'], // Cursor uses `agent acp` subcommand
+    skillsDirs: ['.cursor/skills'],
+  },
+  kiro: {
+    id: 'kiro',
+    name: 'Kiro',
+    cliCommand: 'kiro-cli',
+    authRequired: true, // Requires Kiro / AWS Builder ID login
+    enabled: true, // ✅ Kiro CLI, launched via `kiro-cli acp`
+    supportsStreaming: false,
+    acpArgs: ['acp'], // Kiro uses `kiro-cli acp` subcommand
+  },
+  remote: {
+    id: 'remote',
+    name: 'Remote Agent',
+    cliCommand: undefined, // No local CLI — connected via WebSocket URL
+    authRequired: false,
+    enabled: true,
+    supportsStreaming: true,
+  },
+  aionrs: {
+    id: 'aionrs',
+    name: 'Aion CLI',
+    cliCommand: 'aionrs',
+    authRequired: false, // Auth handled via env vars from model config
+    enabled: true,
+    supportsStreaming: true,
   },
   custom: {
     id: 'custom',
@@ -514,6 +566,27 @@ export function getAllAcpBackends(): AcpBackendConfig[] {
 // 检查后端是否启用 / Check if a backend is enabled
 export function isAcpBackendEnabled(backend: AcpBackendAll): boolean {
   return ACP_BACKENDS_ALL[backend]?.enabled ?? false;
+}
+
+/**
+ * 检查给定 agent 类型/backend 是否支持原生 skill 发现
+ * Check if a given agent type/backend supports native skill discovery.
+ * When false, callers should fallback to prompt injection for skills.
+ */
+export function hasNativeSkillSupport(agentTypeOrBackend: string | undefined): boolean {
+  if (!agentTypeOrBackend) return false;
+  const config = ACP_BACKENDS_ALL[agentTypeOrBackend as AcpBackendAll];
+  return !!config?.skillsDirs?.length;
+}
+
+/**
+ * 获取指定 backend 的原生 skill 目录列表
+ * Get native skill directories for a given backend.
+ * Returns undefined if the backend does not support native skill discovery.
+ */
+export function getSkillsDirsForBackend(agentTypeOrBackend: string | undefined): string[] | undefined {
+  if (!agentTypeOrBackend) return undefined;
+  return ACP_BACKENDS_ALL[agentTypeOrBackend as AcpBackendAll]?.skillsDirs;
 }
 
 // ACP 错误类型系统 - 优雅的错误处理 / ACP Error Type System - Elegant error handling

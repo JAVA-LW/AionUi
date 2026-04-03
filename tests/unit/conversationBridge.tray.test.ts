@@ -5,6 +5,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IConversationService } from '@/process/services/IConversationService';
+import type { IWorkerTaskManager } from '@/process/task/IWorkerTaskManager';
 
 type Provider = (payload?: unknown) => Promise<unknown>;
 
@@ -16,7 +18,6 @@ const createCommand = (key: string) => ({
   provider: vi.fn((fn: Provider) => {
     handlers[key] = fn;
   }),
-  on: vi.fn(() => {}),
   invoke: vi.fn(),
   emit: vi.fn(),
 });
@@ -39,18 +40,13 @@ const mockWorkerTaskManager = {
 };
 
 const registerMocks = () => {
-  vi.doMock('@process/agent/gemini', () => ({
-    GeminiAgent: class {},
+  vi.doMock('@/agent/gemini', () => ({
+    GeminiAgent: vi.fn(),
     GeminiApprovalStore: { getInstance: vi.fn(() => ({})) },
   }));
 
   vi.doMock('@process/services/database', () => ({
-    getDatabase: vi.fn(() =>
-      Promise.resolve({
-        getUserConversations: vi.fn(() => ({ data: [] })),
-      })
-    ),
-    getDatabaseSync: vi.fn(() => ({
+    getDatabase: vi.fn(() => ({
       getUserConversations: vi.fn(() => ({ data: [] })),
     })),
   }));
@@ -73,20 +69,12 @@ const registerMocks = () => {
         responseSearchWorkSpace: { invoke: vi.fn() },
         stop: createCommand('conversation.stop'),
         getSlashCommands: createCommand('conversation.getSlashCommands'),
+        askSideQuestion: createCommand('conversation.askSideQuestion'),
         sendMessage: createCommand('conversation.sendMessage'),
         warmup: createCommand('conversation.warmup'),
-        responseStream: {
-          emit: vi.fn(),
-          on: vi.fn(() => {}),
-        },
-        turnCompleted: {
-          emit: vi.fn(),
-          on: vi.fn(() => {}),
-        },
-        listChanged: {
-          emit: vi.fn(),
-          on: vi.fn(() => {}),
-        },
+        responseStream: { emit: vi.fn() },
+        listChanged: { emit: vi.fn() },
+        listByCronJob: createCommand('conversation.listByCronJob'),
         confirmation: {
           confirm: createCommand('conversation.confirmation.confirm'),
           list: createCommand('conversation.confirmation.list'),
@@ -101,9 +89,10 @@ const registerMocks = () => {
   vi.doMock('@process/utils/initStorage', () => ({
     getSkillsDir: vi.fn(() => '/mock/skills'),
     ProcessChat: { get: vi.fn(async () => []) },
+    ProcessConfig: { get: vi.fn(async () => []) },
   }));
 
-  vi.doMock('@process/task/agentUtils', () => ({
+  vi.doMock('@/process/task/agentUtils', () => ({
     prepareFirstMessage: vi.fn(),
   }));
 
@@ -111,12 +100,12 @@ const registerMocks = () => {
     refreshTrayMenu: mockRefreshTrayMenu,
   }));
 
-  vi.doMock('@process/utils', () => ({
+  vi.doMock('@/process/utils', () => ({
     copyFilesToDirectory: vi.fn(),
     readDirectoryRecursive: vi.fn(),
   }));
 
-  vi.doMock('@process/utils/openclawUtils', () => ({
+  vi.doMock('@/process/utils/openclawUtils', () => ({
     computeOpenClawIdentityHash: vi.fn(async () => 'identity-hash'),
   }));
 
@@ -127,7 +116,10 @@ const registerMocks = () => {
 
 const getProvider = async (key: string): Promise<Provider> => {
   const mod = await import('@process/bridge/conversationBridge');
-  mod.initConversationBridge(mockConversationService as any, mockWorkerTaskManager as any);
+  mod.initConversationBridge(
+    mockConversationService as unknown as IConversationService,
+    mockWorkerTaskManager as unknown as IWorkerTaskManager
+  );
 
   const provider = handlers[key];
   if (!provider) {

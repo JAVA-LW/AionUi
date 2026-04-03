@@ -12,5 +12,7 @@
   "permission": "Permission",
   "switchMode": "Switch Mode",
   "switchSuccess": "Mode switched successfully",
-  "switchFailed": "Failed to switch mode"
+  "switchFailed": "Failed to switch mode",
+  "auto": "Auto",
+  "dontAsk": "Don't Ask"
 }

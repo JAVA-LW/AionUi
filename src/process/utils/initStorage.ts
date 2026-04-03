@@ -51,6 +51,7 @@ const STORAGE_PATH = {
   assistants: 'assistants',
   skills: 'skills',
   builtinSkills: 'builtin-skills',
+  cronSkills: 'cron-skills',
 };
 
 const getHomePage = getConfigPath;
@@ -109,8 +110,11 @@ const migrateLegacyData = async () => {
   return false;
 };
 
-const WriteFile = (path: string, data: string) => {
-  return fs.writeFile(path, data);
+const WriteFile = async (filePath: string, data: string) => {
+  // Ensure parent directory exists to prevent ENOENT on first write
+  const dir = nodePath.dirname(filePath);
+  await fs.mkdir(dir, { recursive: true });
+  return fs.writeFile(filePath, data);
 };
 
 const ReadFile = (path: string) => {
@@ -386,6 +390,14 @@ const getAutoSkillsDir = () => {
 };
 
 /**
+ * Get the directory for per-cron-job SKILL.md files.
+ * Each cron job gets its own subdirectory: {cronSkillsDir}/{jobId}/SKILL.md
+ */
+const getCronSkillsDir = () => {
+  return path.join(cacheDir, STORAGE_PATH.cronSkills);
+};
+
+/**
  * 初始化内置助手的规则和技能文件到用户目录
  * Initialize builtin assistant rule and skill files to user directory
  */
@@ -473,6 +485,12 @@ const initBuiltinAssistantRules = async (): Promise<void> => {
   // Ensure user skills directory exists
   if (!existsSync(userSkillsDir)) {
     mkdirSync(userSkillsDir);
+  }
+
+  // Ensure cron skills directory exists (per-job SKILL.md files)
+  const cronSkillsDir = getCronSkillsDir();
+  if (!existsSync(cronSkillsDir)) {
+    mkdirSync(cronSkillsDir);
   }
 
   // 确保助手目录存在 / Ensure assistants directory exists
@@ -595,6 +613,10 @@ const getBuiltinAssistants = (): AcpBackendConfig[] => {
     // Read default enabled skills from preset config (excluding cron, which is builtin and auto-injected)
     const defaultEnabledSkills = preset.defaultEnabledSkills;
     const enabledByDefault =
+      preset.id === 'word-creator' ||
+      preset.id === 'ppt-creator' ||
+      preset.id === 'excel-creator' ||
+      preset.id === 'academic-paper' ||
       preset.id === 'morph-ppt' ||
       preset.id === 'cowork' ||
       preset.id === 'openclaw-setup' ||
@@ -958,12 +980,26 @@ const initStorage = async () => {
           builtin.promptsI18n &&
           JSON.stringify(existing.promptsI18n) !== JSON.stringify(builtin.promptsI18n);
         const needsPromptsI18nUpdate = needsPromptsI18nMigration || promptsI18nMissing || promptsI18nChanged;
+        const nameI18nMissing = !existing.nameI18n && !!builtin.nameI18n;
+        const nameI18nChanged =
+          existing.nameI18n &&
+          builtin.nameI18n &&
+          JSON.stringify(existing.nameI18n) !== JSON.stringify(builtin.nameI18n);
+        const descriptionI18nMissing = !existing.descriptionI18n && !!builtin.descriptionI18n;
+        const descriptionI18nChanged =
+          existing.descriptionI18n &&
+          builtin.descriptionI18n &&
+          JSON.stringify(existing.descriptionI18n) !== JSON.stringify(builtin.descriptionI18n);
         const shouldUpdate =
           existing.name !== builtin.name ||
           existing.description !== builtin.description ||
           existing.avatar !== builtin.avatar ||
           existing.isPreset !== builtin.isPreset ||
           existing.isBuiltin !== builtin.isBuiltin ||
+          nameI18nMissing ||
+          !!nameI18nChanged ||
+          descriptionI18nMissing ||
+          !!descriptionI18nChanged ||
           needsPromptsI18nUpdate;
         // 当 enabled 是 undefined 或需要迁移时，设置默认值（Cowork 启用，其他禁用）
         // When enabled is undefined or migration needed, set default value (Cowork enabled, others disabled)
@@ -1080,6 +1116,7 @@ export {
   getSkillsDir,
   getBuiltinSkillsCopyDir,
   getAutoSkillsDir,
+  getCronSkillsDir,
   BUILTIN_IMAGE_GEN_ID,
   getBuiltinMcpScriptPath,
 };

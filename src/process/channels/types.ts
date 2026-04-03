@@ -327,6 +327,13 @@ export interface IActionButton {
   params?: Record<string, string>;
 }
 
+export interface IChannelMediaAction {
+  type: 'image' | 'file';
+  path: string;
+  fileName?: string;
+  caption?: string;
+}
+
 /**
  * Unified outgoing message format (System -> Platform)
  */
@@ -340,6 +347,7 @@ export interface IUnifiedOutgoingMessage {
   imageUrl?: string;
   fileUrl?: string;
   fileName?: string;
+  mediaActions?: IChannelMediaAction[];
   replyToMessageId?: string;
   silent?: boolean;
 }

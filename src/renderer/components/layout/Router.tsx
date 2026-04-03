@@ -8,9 +8,13 @@ import {
 } from '@renderer/pages/settings/components/SettingsSider/settingsNavigation';
 const Conversation = React.lazy(() => import('@renderer/pages/conversation'));
 const Guid = React.lazy(() => import('@renderer/pages/guid'));
+const AionrsSettings = React.lazy(() => import('@renderer/pages/settings/AionrsSettings'));
 const ExtensionSettingsPage = React.lazy(() => import('@renderer/pages/settings/ExtensionSettingsPage'));
 const LoginPage = React.lazy(() => import('@renderer/pages/login'));
 const ComponentsShowcase = React.lazy(() => import('@renderer/pages/TestShowcase'));
+const ScheduledTasksPage = React.lazy(() => import('@renderer/pages/cron/ScheduledTasksPage'));
+const TaskDetailPage = React.lazy(() => import('@renderer/pages/cron/ScheduledTasksPage/TaskDetailPage'));
+const TeamIndex = React.lazy(() => import('@renderer/pages/team'));
 
 const withRouteFallback = (Component: React.LazyExoticComponent<React.ComponentType>) => (
   <Suspense fallback={<AppLoader />}>
@@ -49,9 +53,14 @@ const PanelRoute: React.FC<{ layout: React.ReactElement }> = ({ layout }) => {
           {SETTINGS_ROUTE_DEFINITIONS.map((route) => (
             <Route key={route.path} path={`/settings/${route.path}`} element={withRouteFallback(route.component)} />
           ))}
+          <Route path='/settings/aionrs' element={withRouteFallback(AionrsSettings)} />
+          <Route path='/team/:id' element={withRouteFallback(TeamIndex)} />
+          <Route path='/settings/assistants' element={<Navigate to='/settings/agent' replace />} />
           <Route path='/settings/ext/:tabId' element={withRouteFallback(ExtensionSettingsPage)} />
           <Route path='/settings' element={<Navigate to={`/settings/${DEFAULT_SETTINGS_ROUTE}`} replace />} />
           <Route path='/test/components' element={withRouteFallback(ComponentsShowcase)} />
+          <Route path='/scheduled' element={withRouteFallback(ScheduledTasksPage)} />
+          <Route path='/scheduled/:jobId' element={withRouteFallback(TaskDetailPage)} />
         </Route>
         <Route path='*' element={<Navigate to={status === 'authenticated' ? '/guid' : '/login'} replace />} />
       </Routes>

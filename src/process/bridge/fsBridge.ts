@@ -253,7 +253,7 @@ export function initFsBridge(): void {
     const allowedProtocols = new Set(['http:', 'https:']);
     const parsedUrl = new URL(targetUrl);
     if (!allowedProtocols.has(parsedUrl.protocol)) {
-      return Promise.reject(new Error('Unsupported protocol'));
+      throw new Error('Unsupported protocol');
     }
 
     // 仅允许白名单域名，避免随意访问 / Restrict to a whitelist of hosts for safety
@@ -262,7 +262,7 @@ export function initFsBridge(): void {
       (host) => parsedUrl.hostname === host || parsedUrl.hostname.endsWith(`.${host}`)
     );
     if (!isAllowedHost) {
-      return Promise.reject(new Error('URL not allowed for remote fetch'));
+      throw new Error('URL not allowed for remote fetch');
     }
 
     return new Promise((resolve, reject) => {
@@ -376,13 +376,22 @@ export function initFsBridge(): void {
   });
 
   // 读取文件内容（UTF-8编码）/ Read file content (UTF-8 encoding)
+  // V8 string length limit is ~512MB; guard against RangeError on oversized files
+  const MAX_READ_FILE_SIZE = 256 * 1024 * 1024; // 256 MB
+
   ipcBridge.fs.readFile.provider(async ({ path: filePath }) => {
     try {
+      const stat = await fs.stat(filePath);
+      if (stat.size > MAX_READ_FILE_SIZE) {
+        console.warn(`[fsBridge] File too large to read as text (${stat.size} bytes): ${filePath}`);
+        return null;
+      }
       const content = await fs.readFile(filePath, 'utf-8');
       return content;
     } catch (error) {
-      // Return null for missing files (e.g., cleaned-up temp workspaces)
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      const code = (error as NodeJS.ErrnoException).code;
+      // Return null for missing or locked files (e.g., cleaned-up temp workspaces, Windows file locks)
+      if (code === 'ENOENT' || code === 'EBUSY') {
         return null;
       }
       console.error('Failed to read file:', error);
@@ -398,7 +407,8 @@ export function initFsBridge(): void {
       // Convert Node.js Buffer to ArrayBuffer
       return buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'EBUSY') {
         return null;
       }
       console.error('Failed to read file buffer:', error);

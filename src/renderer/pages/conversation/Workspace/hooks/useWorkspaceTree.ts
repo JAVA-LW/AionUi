@@ -15,7 +15,7 @@ import { getFirstLevelKeys } from '../utils/treeHelpers';
 interface UseWorkspaceTreeOptions {
   workspace: string;
   conversation_id: string;
-  eventPrefix: 'gemini' | 'acp' | 'codex';
+  eventPrefix: 'gemini' | 'acp' | 'codex' | 'aionrs';
 }
 
 /**
@@ -119,6 +119,11 @@ export function useWorkspaceTree({ workspace, conversation_id, eventPrefix }: Us
           }
 
           return res;
+        })
+        .catch((err) => {
+          // Prevent unhandled rejection when workspace directory is missing (ENOENT)
+          console.error('[useWorkspaceTree] loadWorkspace failed:', err);
+          return [] as IDirOrFile[];
         })
         .finally(() => {
           setLoadingHandler(false);

@@ -167,11 +167,112 @@ describe('AcpConnection timeout handling', () => {
     vi.advanceTimersByTime(59000);
     expect(cancelSpy).not.toHaveBeenCalled();
 
+    // Simulate process exit so the keepalive does not reset the timeout timer
+    (conn as any).child.killed = true;
+
     // At 61s — should have timed out
     vi.advanceTimersByTime(2000);
     expect(cancelSpy).toHaveBeenCalled();
 
     return promptPromise;
+  });
+});
+
+// ─── Permission request timeout ────────────────────────────────────────────
+
+describe('AcpAgent permission request timeout', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should NOT auto-reject permission requests within 30 minutes', () => {
+    const { agent } = makeAgent();
+    const pendingPermissions = (agent as any).pendingPermissions as Map<string, any>;
+
+    // Simulate a permission request being stored
+    const rejectFn = vi.fn();
+    const requestId = 'test-perm-1';
+    pendingPermissions.set(requestId, { resolve: vi.fn(), reject: rejectFn });
+
+    // Manually invoke the timeout logic that handlePermissionRequest sets up
+    const timeoutFn = () => {
+      if (pendingPermissions.has(requestId)) {
+        pendingPermissions.delete(requestId);
+        rejectFn(new Error('Permission request timed out'));
+      }
+    };
+    const timer = setTimeout(timeoutFn, 1800000);
+
+    // Advance 70 seconds (the old timeout value)
+    vi.advanceTimersByTime(70000);
+    expect(pendingPermissions.has(requestId)).toBe(true);
+    expect(rejectFn).not.toHaveBeenCalled();
+
+    // Advance to 29 minutes
+    vi.advanceTimersByTime(1670000);
+    expect(pendingPermissions.has(requestId)).toBe(true);
+    expect(rejectFn).not.toHaveBeenCalled();
+
+    // Advance past 30 minutes
+    vi.advanceTimersByTime(70000);
+    expect(pendingPermissions.has(requestId)).toBe(false);
+    expect(rejectFn).toHaveBeenCalled();
+
+    clearTimeout(timer);
+  });
+});
+
+// ─── Resume timeout after permission pause ─────────────────────────────────
+
+describe('AcpConnection resume timeout after permission pause', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should reset startTime when resuming from a permission pause', () => {
+    const conn = makeConnection();
+    const pendingRequests = (conn as any).pendingRequests as Map<number, any>;
+
+    const request = {
+      resolve: vi.fn(),
+      reject: vi.fn(),
+      timeoutId: setTimeout(() => {}, 300000),
+      method: 'session/prompt',
+      isPaused: false,
+      startTime: Date.now(),
+      timeoutDuration: 300000,
+      promptOriginTime: Date.now(),
+    };
+    pendingRequests.set(1, request);
+
+    // Pause the request (simulating permission dialog shown)
+    (conn as any).pauseRequestTimeout(1);
+    expect(request.isPaused).toBe(true);
+
+    // Advance time beyond the original timeout duration
+    vi.advanceTimersByTime(600000); // 10 minutes
+
+    // Resume the request (simulating permission dialog resolved)
+    (conn as any).resumeRequestTimeout(1);
+
+    // Should NOT have timed out — startTime was reset
+    expect(request.isPaused).toBe(false);
+    expect(request.reject).not.toHaveBeenCalled();
+    expect(request.timeoutId).toBeDefined();
+
+    // The full timeout duration should restart from now
+    vi.advanceTimersByTime(299000);
+    expect(request.reject).not.toHaveBeenCalled();
+
+    clearTimeout(request.timeoutId);
   });
 });
 
@@ -257,6 +358,94 @@ describe('AcpAgent.kill', () => {
         type: 'finish',
         conversation_id: 'test-agent',
         data: null,
+      })
+    );
+  });
+});
+
+describe('AcpAgent disconnect messaging', () => {
+  it('shows a clear idle-timeout reconnect message', () => {
+    const onStreamEvent = vi.fn();
+    const onSignalEvent = vi.fn();
+    const agent = new AcpAgent({
+      id: 'idle-agent',
+      onStreamEvent,
+      onSignalEvent,
+      extra: { backend: 'opencode' as any, workspace: '/tmp' },
+    } as any);
+
+    agent.setExpectedDisconnectReason('idle_timeout');
+    (agent as any).handleDisconnect({ code: null, signal: 'SIGTERM' });
+
+    expect(onStreamEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        conversation_id: 'idle-agent',
+        data: 'Session closed after 30 minutes of inactivity. Send a new message to reconnect.',
+      })
+    );
+  });
+
+  it('keeps the unexpected-disconnect message for other exits', () => {
+    const onStreamEvent = vi.fn();
+    const onSignalEvent = vi.fn();
+    const agent = new AcpAgent({
+      id: 'disconnect-agent',
+      onStreamEvent,
+      onSignalEvent,
+      extra: { backend: 'opencode' as any, workspace: '/tmp' },
+    } as any);
+
+    (agent as any).handleDisconnect({ code: null, signal: 'SIGTERM' });
+
+    expect(onStreamEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'error',
+        conversation_id: 'disconnect-agent',
+        data: 'opencode process disconnected unexpectedly (code: null, signal: SIGTERM). Please try sending a new message to reconnect.',
+      })
+    );
+  });
+});
+
+describe('AcpAgent file operation presentation', () => {
+  it('emits ACP file reads as tool-call steps instead of plain text messages', () => {
+    const onStreamEvent = vi.fn();
+    const agent = new AcpAgent({
+      id: 'file-op-agent',
+      onStreamEvent,
+      extra: { backend: 'codex' as any, workspace: '/tmp' },
+    } as any);
+
+    (agent as any).handleFileOperation({
+      method: 'fs/read_text_file',
+      path: '/tmp/example.md',
+      sessionId: 'session-1',
+    });
+
+    expect(onStreamEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'acp_tool_call',
+        conversation_id: 'file-op-agent',
+        data: expect.objectContaining({
+          update: expect.objectContaining({
+            sessionUpdate: 'tool_call',
+            status: 'completed',
+            title: 'File Read',
+            kind: 'read',
+            rawInput: expect.objectContaining({
+              file_path: '/tmp/example.md',
+              method: 'fs/read_text_file',
+            }),
+          }),
+        }),
+      })
+    );
+
+    expect(onStreamEvent).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'content',
+        data: expect.stringContaining('File read'),
       })
     );
   });

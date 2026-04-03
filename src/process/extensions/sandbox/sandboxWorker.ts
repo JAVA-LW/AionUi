@@ -17,17 +17,19 @@
  * - Extension code runs with full Worker Thread privileges (Node.js built-ins accessible)
  * - Electron main-process APIs are not directly accessible (different process/thread)
  * - The `aion` proxy provides a structured communication channel to the main thread
- * - Declared permissions in the manifest are NOT enforced at runtime — they are
- *   informational only and used for UI display purposes
+ * - Declared permissions in the manifest are partially enforced at runtime:
+ *   storage access is gated by the storage permission flag on both the worker
+ *   and host sides. Other permissions remain informational only.
  *
- * TODO: Enforce declared permissions at runtime (e.g. via vm.runInNewContext +
- * custom require proxy, or Node.js --experimental-permission flag) to prevent
- * extensions from accessing undeclared Node.js APIs.
+ * TODO: Enforce remaining declared permissions at runtime (e.g. via
+ * vm.runInNewContext + custom require proxy, or Node.js --experimental-permission
+ * flag) to prevent extensions from accessing undeclared Node.js APIs.
  */
 
 import { parentPort, workerData } from 'worker_threads';
 import * as path from 'path';
 import type { SandboxMessage } from './sandbox';
+import { hasSandboxStoragePermission } from './permissions';
 
 if (!parentPort) {
   throw new Error('This script must be run as a Worker Thread');
@@ -78,25 +80,39 @@ const aionProxy = {
     port.postMessage({ type: 'event', name: `ext:${eventName}`, payload } satisfies SandboxMessage);
   },
 
-  /** Storage API (if permission granted) */
-  storage: {
-    get: async (key: string): Promise<unknown> => callMainThread('storage.get', [key]),
-    set: async (key: string, value: unknown): Promise<void> => {
-      await callMainThread('storage.set', [key, value]);
-    },
-    delete: async (key: string): Promise<void> => {
-      await callMainThread('storage.delete', [key]);
-    },
-  },
+  ...(hasSandboxStoragePermission(config.permissions)
+    ? {
+        storage: {
+          get: async (key: string): Promise<unknown> => callMainThread('storage.get', [key]),
+          set: async (key: string, value: unknown): Promise<void> => {
+            await callMainThread('storage.set', [key, value]);
+          },
+          delete: async (key: string): Promise<void> => {
+            await callMainThread('storage.delete', [key]);
+          },
+        },
+      }
+    : {}),
 };
 
 let callIdCounter = 0;
-const pendingMainCalls = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
+const pendingMainCalls = new Map<
+  string,
+  { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }
+>();
+
+/** Timeout for Worker → Host API calls (ms). Matches Host's default callTimeout. */
+const CALL_MAIN_TIMEOUT = 30_000;
 
 function callMainThread(method: string, args: unknown[]): Promise<unknown> {
   const id = `w-${++callIdCounter}`;
   return new Promise((resolve, reject) => {
-    pendingMainCalls.set(id, { resolve, reject });
+    const timer = setTimeout(() => {
+      pendingMainCalls.delete(id);
+      reject(new Error(`[Sandbox Worker] Call "${method}" timed out after ${CALL_MAIN_TIMEOUT}ms`));
+    }, CALL_MAIN_TIMEOUT);
+
+    pendingMainCalls.set(id, { resolve, reject, timer });
     port.postMessage({ type: 'api-call', id, method, args } satisfies SandboxMessage);
   });
 }
@@ -116,6 +132,7 @@ port.on('message', (msg: SandboxMessage) => {
       // Response to our call to main thread
       const pending = pendingMainCalls.get(msg.id);
       if (pending) {
+        clearTimeout(pending.timer);
         pendingMainCalls.delete(msg.id);
         if (msg.error) {
           pending.reject(new Error(msg.error));

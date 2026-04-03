@@ -55,6 +55,7 @@
   "pathLabel": "Path",
   "noTabs": "No tabs open",
   "openInPanelTooltip": "View in preview panel",
+  "mermaidTitle": "Mermaid Diagram",
   "largeTextTruncatedHint": "Large file preview mode: showing first {{count}} characters for performance.",
   "errors": {
     "missingFilePath": "File path is missing",
@@ -66,7 +67,13 @@
     "title": "Word Document",
     "loading": "Loading Word document...",
     "invalid": "Please confirm the file is a valid Word document",
-    "loadFailed": "Failed to load Word document"
+    "loadFailed": "Failed to load Word document",
+    "watch": {
+      "loading": "Loading Word document...",
+      "installing": "Installing officecli...",
+      "startFailed": "Failed to start Word preview",
+      "installHint": "Requires officecli. It will be installed automatically."
+    }
   },
   "excel": {
     "title": "Excel Spreadsheet",
@@ -77,7 +84,13 @@
     "convertFailed": "Excel conversion failed",
     "loadFailed": "Failed to load Excel workbook",
     "emptySheet": "This worksheet has no data",
-    "emptySheetHint": "Check whether the sheet contains data or images"
+    "emptySheetHint": "Check whether the sheet contains data or images",
+    "watch": {
+      "loading": "Loading Excel file...",
+      "installing": "Installing officecli...",
+      "startFailed": "Failed to start Excel preview",
+      "installHint": "Requires officecli. It will be installed automatically."
+    }
   },
   "pdf": {
     "title": "PDF Document",

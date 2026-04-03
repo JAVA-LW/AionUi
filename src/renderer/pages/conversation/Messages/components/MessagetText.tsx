@@ -18,7 +18,32 @@ import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
 import MarkdownView from '@renderer/components/Markdown';
 import { stripThinkTags, hasThinkTags } from '@renderer/utils/chat/thinkTagFilter';
+import { stripSkillSuggest, hasSkillSuggest } from '@renderer/utils/chat/skillSuggestParser';
+
+/**
+ * Format a timestamp for message display.
+ * Today: "HH:mm", older: "MM-DD HH:mm".
+ */
+export const formatMessageTime = (timestamp: number): string => {
+  const date = new Date(timestamp);
+  const now = new Date();
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const time = `${hours}:${minutes}`;
+
+  if (
+    date.getFullYear() !== now.getFullYear() ||
+    date.getMonth() !== now.getMonth() ||
+    date.getDate() !== now.getDate()
+  ) {
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${month}-${day} ${time}`;
+  }
+  return time;
+};
 import MessageCronBadge from './MessageCronBadge';
+import { getAgentLogo } from '@/renderer/utils/model/agentLogo';
 
 const parseFileMarker = (content: string) => {
   const markerIndex = content.indexOf(AIONUI_FILES_MARKER);
@@ -55,11 +80,18 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   // Filter think tags from content before rendering
   // 在渲染前过滤 think 标签
   const contentToRender = useMemo(() => {
-    const rawContent = message.content.content;
-    if (typeof rawContent === 'string' && hasThinkTags(rawContent)) {
-      return stripThinkTags(rawContent);
+    let content = message.content.content;
+    if (typeof content === 'string') {
+      if (hasThinkTags(content)) {
+        content = stripThinkTags(content);
+      }
+      // Strip any inline [SKILL_SUGGEST] blocks (now handled via separate skill_suggest message type)
+      if (hasSkillSuggest(content)) {
+        content = stripSkillSuggest(content);
+      }
+      return content;
     }
-    return rawContent;
+    return content;
   }, [message.content.content]);
 
   const { text, files } = parseFileMarker(contentToRender);
@@ -67,6 +99,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   const { t } = useTranslation();
   const [showCopyAlert, setShowCopyAlert] = useState(false);
   const isUserMessage = message.position === 'right';
+  const isTeammateMessage = message.position === 'left' && message.content.teammateMessage === true;
 
   // 过滤空内容，避免渲染空DOM
   if (!message.content.content || (typeof message.content.content === 'string' && !message.content.content.trim())) {
@@ -100,11 +133,26 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
   );
 
   const cronMeta = message.content.cronMeta;
+  const senderName = message.content.senderName;
+  const senderAgentType = message.content.senderAgentType;
+  const agentLogo = senderAgentType ? getAgentLogo(senderAgentType) : null;
 
   return (
     <>
       <div className={classNames('min-w-0 flex flex-col group', isUserMessage ? 'items-end' : 'items-start')}>
         {cronMeta && <MessageCronBadge meta={cronMeta} />}
+        {isTeammateMessage && senderName && (
+          <div className='flex items-center gap-6px mb-4px'>
+            {agentLogo ? (
+              <img src={agentLogo} alt={senderName} className='w-20px h-20px rounded-full object-contain' />
+            ) : (
+              <div className='w-20px h-20px rounded-full bg-fill-3 flex items-center justify-center text-10px text-t-secondary font-medium'>
+                {senderName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <span className='text-12px text-t-secondary'>{senderName}</span>
+          </div>
+        )}
         {files.length > 0 && (
           <div className={classNames('mt-6px', { 'self-end': isUserMessage })}>
             {files.length === 1 ? (
@@ -123,9 +171,16 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
         <div
           className={classNames('min-w-0 [&>p:first-child]:mt-0px [&>p:last-child]:mb-0px md:max-w-780px', {
             'bg-aou-2 p-8px': isUserMessage || cronMeta,
-            'w-full': !(isUserMessage || cronMeta),
+            'bg-3 p-8px': isTeammateMessage,
+            'w-full': !(isUserMessage || cronMeta || isTeammateMessage),
           })}
-          style={isUserMessage || cronMeta ? { borderRadius: '8px 0 8px 8px' } : undefined}
+          style={
+            isUserMessage || cronMeta
+              ? { borderRadius: '8px 0 8px 8px' }
+              : isTeammateMessage
+                ? { borderRadius: '0 8px 8px 8px' }
+                : undefined
+          }
         >
           {/* JSON 内容使用折叠组件 Use CollapsibleContent for JSON content */}
           {json ? (
@@ -139,12 +194,16 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
           )}
         </div>
         <div
-          className={classNames('h-32px flex items-center mt-4px', {
-            'justify-end': isUserMessage,
-            'justify-start': !isUserMessage,
+          className={classNames('h-32px flex items-center mt-4px gap-8px', {
+            'flex-row-reverse': isUserMessage,
           })}
         >
           {copyButton}
+          {message.createdAt && (
+            <span className='text-12px c-text-4 opacity-0 group-hover:opacity-100 transition-opacity select-none'>
+              {formatMessageTime(message.createdAt)}
+            </span>
+          )}
         </div>
       </div>
       {showCopyAlert && (

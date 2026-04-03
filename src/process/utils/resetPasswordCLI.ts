@@ -65,6 +65,12 @@ export function resolveResetPasswordUsername(argv: string[]): string {
   return argsAfterCommand.find((arg) => !arg.startsWith('--')) || 'admin';
 }
 
+/**
+ * Reset password for a user (CLI mode, works in packaged apps)
+ * 重置用户密码（CLI模式,在打包应用中可用）
+ *
+ * @param username - Username to reset password for
+ */
 export async function resetPasswordCLI(username: string): Promise<void> {
   try {
     log.info('Starting password reset...');
