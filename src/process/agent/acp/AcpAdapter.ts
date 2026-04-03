@@ -123,11 +123,6 @@ export class AcpAdapter {
       case 'available_commands_update':
         break;
 
-      // User message chunks are echoed back during session/load restore.
-      // They are already displayed from local DB, so ignore them silently.
-      case 'user_message_chunk':
-        break;
-
       default: {
         // Handle unexpected session update types
         const unknownUpdate = update as { sessionUpdate?: string };
