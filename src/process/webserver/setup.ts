@@ -64,12 +64,17 @@ function getCsrfSecret(): string {
 // 在模块加载时生成一次，整个进程生命周期内保持不变
 // Generate once at module load, remains constant for process lifetime
 const CSRF_SECRET = getCsrfSecret();
+const DEFAULT_TRUST_PROXY = 'loopback, linklocal, uniquelocal';
 
 /**
  * 配置基础中间件
  * Configure basic middleware for Express app
  */
 export function setupBasicMiddleware(app: Express): void {
+  // Trust only local/private reverse proxies so req.ip can safely use
+  // X-Forwarded-For when AionUi is fronted by localhost, Docker, or LAN proxies.
+  app.set('trust proxy', DEFAULT_TRUST_PROXY);
+
   // 请求体解析器
   // Body parsers
   app.use(express.json({ limit: '10mb' }));

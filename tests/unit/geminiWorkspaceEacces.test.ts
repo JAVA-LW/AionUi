@@ -1,7 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.resetModules();
+  vi.doUnmock('@office-ai/aioncli-core');
+  vi.doUnmock('../../src/process/agent/gemini/index');
+});
 
 /**
  * Verifies that an inaccessible workspace directory causes fs.realpath to
@@ -71,5 +78,189 @@ describe('gemini workspace EACCES guard (ELECTRON-BM)', () => {
 
       await fs.rm(tmpDir, { recursive: true });
     });
+  });
+});
+
+describe('gemini cli config memory discovery fallback', () => {
+  it('continues with empty memory when hierarchical discovery hits EACCES', async () => {
+    const loadServerHierarchicalMemoryMock = vi.fn().mockRejectedValue(
+      Object.assign(new Error('EACCES: permission denied, open /tmp/postgres'), {
+        code: 'EACCES',
+      })
+    );
+    const setFallbackModelHandler = vi.fn();
+    const configInstances: Array<{
+      options: unknown;
+      setFallbackModelHandler: typeof setFallbackModelHandler;
+    }> = [];
+
+    class ConfigMock {
+      options: unknown;
+      setFallbackModelHandler = setFallbackModelHandler;
+
+      constructor(options: unknown) {
+        this.options = options;
+        configInstances.push(this);
+      }
+    }
+
+    class FileDiscoveryServiceMock {}
+
+    class SimpleExtensionLoaderMock {
+      getExtensions() {
+        return [];
+      }
+    }
+
+    vi.doMock('@office-ai/aioncli-core', async () => {
+      const actual = await vi.importActual<typeof import('@office-ai/aioncli-core')>('@office-ai/aioncli-core');
+      return {
+        ...actual,
+        Config: ConfigMock,
+        FileDiscoveryService: FileDiscoveryServiceMock,
+        SimpleExtensionLoader: SimpleExtensionLoaderMock,
+        loadServerHierarchicalMemory: loadServerHierarchicalMemoryMock,
+      };
+    });
+    vi.doMock('../../src/process/agent/gemini/index', () => ({
+      getCurrentGeminiAgent: () => null,
+    }));
+
+    const { loadCliConfig } = await import('../../src/process/agent/gemini/cli/config');
+
+    await loadCliConfig({
+      workspace: '/tmp/aionui-workspace',
+      settings: {},
+      extensions: [],
+      sessionId: 'session-1',
+      conversationToolConfig: {
+        getConfig: () => ({ excludeTools: [] }),
+      } as never,
+    });
+
+    expect(loadServerHierarchicalMemoryMock).toHaveBeenCalledOnce();
+    expect(configInstances).toHaveLength(1);
+
+    const configOptions = configInstances[0]?.options as {
+      userMemory: { global: string; extension: string; project: string };
+      geminiMdFileCount: number;
+    };
+
+    expect(configOptions.userMemory).toEqual({
+      global: '',
+      extension: '',
+      project: '',
+    });
+    expect(configOptions.geminiMdFileCount).toBe(0);
+    expect(setFallbackModelHandler).toHaveBeenCalledOnce();
+  });
+
+  it('rethrows non-permission memory discovery errors', async () => {
+    const loadServerHierarchicalMemoryMock = vi.fn().mockRejectedValue(new Error('memory discovery exploded'));
+
+    class ConfigMock {
+      constructor(readonly options: unknown) {}
+
+      setFallbackModelHandler = vi.fn();
+    }
+
+    class FileDiscoveryServiceMock {}
+
+    class SimpleExtensionLoaderMock {
+      getExtensions() {
+        return [];
+      }
+    }
+
+    vi.doMock('@office-ai/aioncli-core', async () => {
+      const actual = await vi.importActual<typeof import('@office-ai/aioncli-core')>('@office-ai/aioncli-core');
+      return {
+        ...actual,
+        Config: ConfigMock,
+        FileDiscoveryService: FileDiscoveryServiceMock,
+        SimpleExtensionLoader: SimpleExtensionLoaderMock,
+        loadServerHierarchicalMemory: loadServerHierarchicalMemoryMock,
+      };
+    });
+    vi.doMock('../../src/process/agent/gemini/index', () => ({
+      getCurrentGeminiAgent: () => null,
+    }));
+
+    const { loadCliConfig } = await import('../../src/process/agent/gemini/cli/config');
+
+    await expect(
+      loadCliConfig({
+        workspace: '/tmp/aionui-workspace',
+        settings: {},
+        extensions: [],
+        sessionId: 'session-2',
+        conversationToolConfig: {
+          getConfig: () => ({ excludeTools: [] }),
+        } as never,
+      })
+    ).rejects.toThrow('memory discovery exploded');
+  });
+});
+
+describe('gemini @directory handling', () => {
+  it('does not expand directory references into recursive globs before read_many_files', async () => {
+    const workspaceRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'gemini-dir-ref-'));
+    const repoDir = path.join(workspaceRoot, 'repo');
+    await fs.mkdir(path.join(repoDir, 'docker', 'volumes', 'postgres'), { recursive: true });
+
+    const buildMock = vi.fn(() => ({
+      getDescription: () => 'mock read_many_files',
+      execute: vi.fn().mockResolvedValue({
+        llmContent: ['No files matching the criteria were found or all were skipped.'],
+        returnDisplay: 'No files were read.',
+      }),
+    }));
+
+    const { handleAtCommand } = await import('../../src/process/agent/gemini/cli/atCommandProcessor');
+
+    const result = await handleAtCommand({
+      query: 'inspect @repo',
+      config: {
+        getFileService: () => ({
+          shouldIgnoreFile: () => false,
+        }),
+        getFileFilteringOptions: () => ({
+          respectGitIgnore: true,
+          respectGeminiIgnore: true,
+        }),
+        getToolRegistry: async () => ({
+          getTool: (name: string) => {
+            if (name === 'read_many_files') {
+              return {
+                build: buildMock,
+                displayName: 'ReadManyFiles',
+              };
+            }
+            return undefined;
+          },
+        }),
+        getWorkspaceContext: () => ({
+          isPathWithinWorkspace: () => true,
+          getDirectories: () => [workspaceRoot],
+        }),
+        getEnableRecursiveFileSearch: () => true,
+      } as never,
+      addItem: () => {},
+      onDebugMessage: () => {},
+      messageId: Date.now(),
+      signal: new AbortController().signal,
+    });
+
+    expect(result.shouldProceed).toBe(true);
+    expect(buildMock).toHaveBeenCalledOnce();
+    expect(buildMock).toHaveBeenCalledWith({
+      paths: ['repo'],
+      file_filtering_options: {
+        respect_git_ignore: true,
+        respect_gemini_ignore: true,
+      },
+    });
+
+    await fs.rm(workspaceRoot, { recursive: true, force: true });
   });
 });

@@ -16,6 +16,30 @@ const WORKSPACE_OFFICE_RE = /\.(pptx|docx|xlsx)$/i;
 // workspace → { watcher, emitted set }
 const workspaceWatchers = new Map<string, { watcher: fs.FSWatcher; emitted: Set<string> }>();
 
+function closeWatcherSafely(watcher: fs.FSWatcher): void {
+  try {
+    watcher.close();
+  } catch {
+    // Ignore close failures during cleanup.
+  }
+}
+
+function attachWatcherErrorHandler(watcher: fs.FSWatcher, label: string, cleanup: () => void): void {
+  watcher.on('error', (error) => {
+    console.error(`[${label}] Watcher error:`, error);
+    cleanup();
+  });
+}
+
+function shouldUseRecursiveWorkspaceWatch(): boolean {
+  const isBunRuntime = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+
+  // Bun on Linux can surface asynchronous EACCES errors for unreadable
+  // descendants when recursive watch is enabled. Fall back to top-level watch
+  // outside the known-safe Node/macOS/Windows combinations.
+  return !isBunRuntime && process.platform !== 'linux';
+}
+
 // 初始化文件监听桥接，负责 start/stop 所有 watcher / Initialize file watch bridge to manage start/stop of watchers
 export function initFileWatchBridge(): void {
   // 开始监听文件 / Start watching file
@@ -31,6 +55,10 @@ export function initFileWatchBridge(): void {
       const watcher = fs.watch(filePath, (eventType) => {
         // 文件变化时，通知 renderer 进程 / Notify renderer process on file change
         ipcBridge.fileWatch.fileChanged.emit({ filePath, eventType });
+      });
+      attachWatcherErrorHandler(watcher, 'FileWatch', () => {
+        closeWatcherSafely(watcher);
+        watchers.delete(filePath);
       });
 
       watchers.set(filePath, watcher);
@@ -75,19 +103,18 @@ export function initFileWatchBridge(): void {
   ipcBridge.workspaceOfficeWatch.start.provider(({ workspace }) => {
     try {
       if (workspaceWatchers.has(workspace)) {
-        workspaceWatchers.get(workspace)?.watcher.close();
+        closeWatcherSafely(workspaceWatchers.get(workspace)!.watcher);
         workspaceWatchers.delete(workspace);
       }
 
       const emitted = new Set<string>();
 
-      // Note: { recursive: true } works on macOS and Windows but is not supported
-      // on Linux (Node.js limitation). Only top-level files are watched there.
-      const watcher = fs.watch(workspace, { recursive: true }, (eventType, filename) => {
+      const onWorkspaceChange = (eventType: string, filename: string | Buffer | null) => {
         if (!filename || eventType !== 'rename') return;
-        if (!WORKSPACE_OFFICE_RE.test(filename)) return;
+        const normalizedFilename = typeof filename === 'string' ? filename : filename.toString();
+        if (!WORKSPACE_OFFICE_RE.test(normalizedFilename)) return;
 
-        const fullPath = path.join(workspace, filename);
+        const fullPath = path.join(workspace, normalizedFilename);
         if (emitted.has(fullPath)) return;
 
         // Only emit if the file was just created (not deleted)
@@ -99,6 +126,13 @@ export function initFileWatchBridge(): void {
 
         emitted.add(fullPath);
         ipcBridge.workspaceOfficeWatch.fileAdded.emit({ filePath: fullPath, workspace });
+      };
+      const watcher = shouldUseRecursiveWorkspaceWatch()
+        ? fs.watch(workspace, { recursive: true }, onWorkspaceChange)
+        : fs.watch(workspace, onWorkspaceChange);
+      attachWatcherErrorHandler(watcher, 'WorkspaceOfficeWatch', () => {
+        closeWatcherSafely(watcher);
+        workspaceWatchers.delete(workspace);
       });
 
       workspaceWatchers.set(workspace, { watcher, emitted });
@@ -113,7 +147,7 @@ export function initFileWatchBridge(): void {
   ipcBridge.workspaceOfficeWatch.stop.provider(({ workspace }) => {
     try {
       if (workspaceWatchers.has(workspace)) {
-        workspaceWatchers.get(workspace)?.watcher.close();
+        closeWatcherSafely(workspaceWatchers.get(workspace)!.watcher);
         workspaceWatchers.delete(workspace);
       }
       return Promise.resolve({ success: true });

@@ -146,6 +146,10 @@ export class GeminiAgentManager extends BaseAgentManager<
     // 向后兼容 / Backward compatible
     this.contextContent = data.contextContent || data.presetRules;
     this.bootstrap = this.createBootstrap();
+    // Prevent unhandled rejection when a restored conversation bootstraps into
+    // an unreadable workspace. The error still propagates when sendMessage()
+    // or other callers explicitly await this.bootstrap.
+    this.bootstrap.catch(() => {});
   }
 
   /**

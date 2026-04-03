@@ -187,4 +187,32 @@ describe('readDirectoryRecursive', () => {
     expect(names).toContain('index.ts');
     expect(names).not.toContain('node_modules');
   });
+
+  it('skips entries when fileService.shouldIgnoreFile throws EACCES', async () => {
+    await fsp.mkdir(path.join(tmpDir, 'safe-dir'));
+    await fsp.writeFile(path.join(tmpDir, 'safe-dir', 'ok.txt'), 'ok');
+    await fsp.mkdir(path.join(tmpDir, 'restricted-dir'));
+    await fsp.writeFile(path.join(tmpDir, 'root.txt'), 'root');
+
+    const result = await readDirectoryRecursive(tmpDir, {
+      maxDepth: 2,
+      abortController: new AbortController(),
+      fileService: {
+        shouldIgnoreFile(filePath: string) {
+          if (filePath.endsWith(path.join('restricted-dir'))) {
+            const err = new Error('EACCES: permission denied, open restricted-dir') as NodeJS.ErrnoException;
+            err.code = 'EACCES';
+            throw err;
+          }
+          return false;
+        },
+      },
+    });
+
+    expect(result).not.toBeNull();
+    const names = result.children.map((c) => c.name);
+    expect(names).toContain('root.txt');
+    expect(names).toContain('safe-dir');
+    expect(names).not.toContain('restricted-dir');
+  });
 });

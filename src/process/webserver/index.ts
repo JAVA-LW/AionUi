@@ -296,7 +296,13 @@ export async function startWebServerWithInstance(port: number, allowRemote = fal
   // Listen on 0.0.0.0 (all interfaces) or 127.0.0.1 (local only) based on allowRemote
   const host = allowRemote ? SERVER_CONFIG.REMOTE_HOST : SERVER_CONFIG.DEFAULT_HOST;
   return new Promise((resolve, reject) => {
-    server.listen(port, host, () => {
+    const cleanupListeners = () => {
+      server.off('error', handleError);
+      server.off('listening', handleListening);
+    };
+
+    const handleListening = () => {
+      cleanupListeners();
       const localUrl = `http://localhost:${port}`;
       const serverIP = getServerIP();
       const displayUrl = serverIP ? `http://${serverIP}:${port}` : localUrl;
@@ -322,15 +328,20 @@ export async function startWebServerWithInstance(port: number, allowRemote = fal
         port,
         allowRemote,
       });
-    });
+    };
 
-    server.on('error', (err: NodeJS.ErrnoException) => {
+    const handleError = (err: NodeJS.ErrnoException) => {
+      cleanupListeners();
       if (err.code === 'EADDRINUSE') {
         const nextPort = port + 1;
         const maxPort = SERVER_CONFIG.DEFAULT_PORT + 10;
         if (nextPort <= maxPort) {
           console.warn(`⚠️ Port ${port} is in use, trying ${nextPort}... / 端口 ${port} 已被占用，尝试 ${nextPort}...`);
-          server.close();
+          try {
+            server.close();
+          } catch {
+            // Ignore close errors when the socket never started listening.
+          }
           resolve(startWebServerWithInstance(nextPort, allowRemote));
         } else {
           console.error(`❌ Ports ${SERVER_CONFIG.DEFAULT_PORT}-${maxPort} all in use / 端口全部被占用`);
@@ -340,7 +351,11 @@ export async function startWebServerWithInstance(port: number, allowRemote = fal
         console.error('❌ Server error / 服务器错误:', err);
         reject(err);
       }
-    });
+    };
+
+    server.once('error', handleError);
+    server.once('listening', handleListening);
+    server.listen(port, host);
   });
 }
 

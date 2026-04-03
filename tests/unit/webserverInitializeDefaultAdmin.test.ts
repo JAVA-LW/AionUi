@@ -16,6 +16,13 @@ type MockSystemUser = {
   last_login: number | null;
 };
 
+type MockServer = {
+  close: ReturnType<typeof vi.fn>;
+  listen: ReturnType<typeof vi.fn>;
+  off: ReturnType<typeof vi.fn>;
+  once: ReturnType<typeof vi.fn>;
+};
+
 const makeSystemUser = (overrides?: Partial<MockSystemUser>): MockSystemUser => ({
   id: 'system_default_user',
   username: 'system_default_user',
@@ -27,15 +34,20 @@ const makeSystemUser = (overrides?: Partial<MockSystemUser>): MockSystemUser => 
   ...overrides,
 });
 
-const mockWebServerModuleDeps = () => {
+const mockWebServerModuleDeps = (options?: { createServerImpl?: () => MockServer }) => {
   vi.doMock('express', () => ({
     default: vi.fn(() => ({})),
   }));
   vi.doMock('http', () => ({
-    createServer: vi.fn(() => ({
-      listen: vi.fn(),
-      on: vi.fn(),
-    })),
+    createServer: vi.fn(
+      options?.createServerImpl ??
+        (() => ({
+          listen: vi.fn(),
+          close: vi.fn(),
+          off: vi.fn(),
+          once: vi.fn(),
+        }))
+    ),
   }));
   vi.doMock('ws', () => ({
     WebSocketServer: vi.fn(),
@@ -161,5 +173,83 @@ describe('initializeDefaultAdmin', () => {
     expect(setSystemUserCredentialsMock).toHaveBeenCalledWith('renamed-admin', 'hashed-password');
     expect(createUserMock).not.toHaveBeenCalled();
     expect(updatePasswordMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('startWebServerWithInstance', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('retries on the next port when the initial port is already in use', async () => {
+    const createdServers: MockServer[] = [];
+    let createCount = 0;
+
+    mockWebServerModuleDeps({
+      createServerImpl: () => {
+        const listeners = new Map<string, (...args: unknown[]) => void>();
+        const server: MockServer = {
+          close: vi.fn(),
+          off: vi.fn((event: string) => {
+            listeners.delete(event);
+          }),
+          once: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+            listeners.set(event, handler);
+            return server;
+          }),
+          listen: vi.fn((port: number, _host: string) => {
+            if (createCount === 0) {
+              createCount += 1;
+              const errorHandler = listeners.get('error');
+              if (!errorHandler) {
+                throw Object.assign(new Error('listener missing'), { code: 'EADDRINUSE' });
+              }
+              errorHandler(Object.assign(new Error('address in use'), { code: 'EADDRINUSE' }));
+              return server;
+            }
+
+            createCount += 1;
+            const listeningHandler = listeners.get('listening');
+            listeningHandler?.();
+            return server;
+          }),
+        };
+
+        createdServers.push(server);
+        return server;
+      },
+    });
+
+    vi.doMock('@process/webserver/auth/repository/UserRepository', () => ({
+      UserRepository: {
+        getSystemUser: vi.fn(async () => null),
+        findByUsername: vi.fn(async () => ({ id: 'admin', password_hash: 'hash' })),
+      },
+    }));
+    vi.doMock('@process/webserver/auth/service/AuthService', () => ({
+      AuthService: {
+        generateRandomPassword: vi.fn(() => 'generated-password'),
+        hashPassword: vi.fn(async () => 'hashed-password'),
+      },
+    }));
+
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { startWebServerWithInstance } = await import('@process/webserver/index');
+    const { SERVER_CONFIG } = await import('@process/webserver/config/constants');
+
+    const result = await startWebServerWithInstance(3000, true);
+
+    expect(createdServers).toHaveLength(2);
+    expect(createdServers[0]?.once).toHaveBeenCalledWith('error', expect.any(Function));
+    expect(createdServers[0]?.once).toHaveBeenCalledWith('listening', expect.any(Function));
+    expect(createdServers[0]?.listen).toHaveBeenCalledWith(3000, SERVER_CONFIG.REMOTE_HOST);
+    expect(createdServers[0]?.close).toHaveBeenCalledTimes(1);
+    expect(createdServers[1]?.listen).toHaveBeenCalledWith(3001, SERVER_CONFIG.REMOTE_HOST);
+    expect(result.port).toBe(3001);
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '⚠️ Port 3000 is in use, trying 3001... / 端口 3000 已被占用，尝试 3001...'
+    );
   });
 });

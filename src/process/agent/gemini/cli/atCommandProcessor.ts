@@ -244,13 +244,16 @@ export async function handleAtCommand({
 
     for (const dir of config.getWorkspaceContext().getDirectories()) {
       let currentPathSpec = pathName;
+      let isDirectoryReference = false;
       let resolvedSuccessfully = false;
       try {
         const absolutePath = path.resolve(dir, pathName);
         const stats = await fs.stat(absolutePath);
         if (stats.isDirectory()) {
-          currentPathSpec = pathName + (pathName.endsWith(path.sep) ? `**` : `/**`);
-          onDebugMessage(`Path ${pathName} resolved to directory, using glob: ${currentPathSpec}`);
+          isDirectoryReference = true;
+          onDebugMessage(
+            `Path ${pathName} resolved to directory, keeping directory reference without recursive expansion.`
+          );
         } else {
           onDebugMessage(`Path ${pathName} resolved to file: ${absolutePath}`);
         }
@@ -306,7 +309,7 @@ export async function handleAtCommand({
       if (resolvedSuccessfully) {
         pathSpecsToRead.push(currentPathSpec);
         atPathToResolvedSpecMap.set(originalAtPath, currentPathSpec);
-        contentLabelsForDisplay.push(pathName);
+        contentLabelsForDisplay.push(isDirectoryReference ? `${pathName}/` : pathName);
         break;
       }
     }

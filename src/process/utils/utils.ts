@@ -185,7 +185,16 @@ export async function readDirectoryRecursive(
     checkStatus();
     if (item === 'node_modules') continue;
     const itemPath = path.join(dirPath, item);
-    if (fileService && fileService.shouldIgnoreFile(itemPath)) continue;
+    if (fileService) {
+      try {
+        if (fileService.shouldIgnoreFile(itemPath)) continue;
+      } catch {
+        // Ignore filter implementations may throw on unreadable directories
+        // (for example, third-party workspace scanners touching permission-
+        // restricted bind mounts). Skip the problematic node and continue.
+        continue;
+      }
+    }
 
     let itemStats: Awaited<ReturnType<typeof fs.stat>>;
     try {

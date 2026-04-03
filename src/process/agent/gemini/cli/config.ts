@@ -13,6 +13,8 @@ import {
   DEFAULT_MEMORY_FILE_FILTERING_OPTIONS,
   FileDiscoveryService,
   getCurrentGeminiMdFilename,
+  getErrorMessage,
+  isNodeError,
   loadServerHierarchicalMemory,
   setGeminiMdFilename as setServerGeminiMdFilename,
   SimpleExtensionLoader,
@@ -31,6 +33,21 @@ const logger = {
   warn: (...args: unknown[]) => console.warn('[WARN]', ...args),
   error: (...args: unknown[]) => console.error('[ERROR]', ...args),
 };
+
+const EMPTY_HIERARCHICAL_MEMORY = {
+  global: '',
+  extension: '',
+  project: '',
+};
+
+function shouldIgnoreHierarchicalMemoryError(error: unknown): boolean {
+  if (isNodeError(error)) {
+    return error.code === 'EACCES' || error.code === 'EPERM';
+  }
+
+  const message = getErrorMessage(error).toLowerCase();
+  return message.includes('eacces') || message.includes('eperm') || message.includes('permission denied');
+}
 
 export interface CliArgs {
   model: string | undefined;
@@ -190,17 +207,34 @@ export async function loadCliConfig({
   // Directly use aioncli-core's loadServerHierarchicalMemory with ExtensionLoader
   const extensionLoader = new SimpleExtensionLoader(allExtensions);
   const folderTrust = true; // 默认信任工作区 / Default to trusting the workspace
-  const { memoryContent, fileCount } = await loadServerHierarchicalMemory(
-    workspace,
-    [],
-    debugMode,
-    fileService,
-    extensionLoader,
-    folderTrust,
-    memoryImportFormat,
-    fileFiltering,
-    settings.memoryDiscoveryMaxDirs
-  );
+  let memoryContent = { ...EMPTY_HIERARCHICAL_MEMORY };
+  let fileCount = 0;
+
+  try {
+    const memoryResult = await loadServerHierarchicalMemory(
+      workspace,
+      [],
+      debugMode,
+      fileService,
+      extensionLoader,
+      folderTrust,
+      memoryImportFormat,
+      fileFiltering,
+      settings.memoryDiscoveryMaxDirs
+    );
+    memoryContent = memoryResult.memoryContent;
+    fileCount = memoryResult.fileCount;
+  } catch (error) {
+    if (!shouldIgnoreHierarchicalMemoryError(error)) {
+      throw error;
+    }
+
+    logger.warn(
+      `[Config] Skipping hierarchical memory discovery for workspace "${workspace}" due to unreadable path: ${getErrorMessage(
+        error
+      )}`
+    );
+  }
 
   let mcpServersConfig = mergeMcpServers(settings, activeExtensions, mcpServers);
 
