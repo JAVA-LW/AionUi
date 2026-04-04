@@ -41,6 +41,7 @@ import {
 import { buildAcpModelInfo, summarizeAcpModelInfo } from './modelInfo';
 import {
   buildBuiltinAcpSessionMcpServers,
+  buildTeamMcpServer,
   parseAcpMcpCapabilities,
   type AcpSessionMcpServer,
 } from './mcpSessionConfig';
@@ -114,6 +115,8 @@ export interface AcpAgentConfig {
     sessionMode?: string;
     /** Team MCP server stdio config injected by TeamSessionService */
     teamMcpStdioConfig?: { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
+    /** Pending config option selections from Guid page (applied after session creation) */
+    pendingConfigOptions?: Record<string, string>;
   };
   onStreamEvent: (data: IResponseMessage) => void;
   onPromptUsage?: (usage: AcpPromptResponseUsage) => void;
@@ -126,7 +129,6 @@ export interface AcpAgentConfig {
 
 // ACP agent任务类
 export class AcpAgent {
-  private expectedDisconnectReason: 'idle_timeout' | null = null;
   private readonly id: string;
   private extra: {
     workspace?: string;
@@ -150,6 +152,8 @@ export class AcpAgent {
     sessionMode?: string;
     /** Team MCP server stdio config injected by TeamSessionService */
     teamMcpStdioConfig?: { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> };
+    /** Pending config option selections from Guid page (applied after session creation) */
+    pendingConfigOptions?: Record<string, string>;
   };
   private connection: AcpConnection;
   private adapter: AcpAdapter;
@@ -190,6 +194,9 @@ export class AcpAgent {
 
   // Whether usage_update session notifications have been received (if so, skip PromptResponse.usage fallback)
   private hasReceivedUsageUpdate = false;
+  // Turn-level observability for "thought shown but no answer rendered" cases.
+  private turnHasThought = false;
+  private turnHasContent = false;
 
   constructor(config: AcpAgentConfig) {
     this.id = config.id;
@@ -234,10 +241,6 @@ export class AcpAgent {
     this.connection.onDisconnect = (error) => {
       this.handleDisconnect(error);
     };
-  }
-
-  setExpectedDisconnectReason(reason: 'idle_timeout' | null): void {
-    this.expectedDisconnectReason = reason;
   }
 
   /**
@@ -405,6 +408,21 @@ export class AcpAgent {
             `[ACP] Failed to set model "${this.extra.currentModelId}": ${error instanceof Error ? error.message : String(error)}`
           );
         }
+      }
+
+      // Apply pending config options from Guid page selection (e.g., reasoning_effort)
+      if (this.extra.pendingConfigOptions) {
+        await Promise.all(
+          Object.entries(this.extra.pendingConfigOptions).map(async ([configId, value]) => {
+            try {
+              await this.connection.setConfigOption(configId, value);
+            } catch (error) {
+              console.warn(
+                `[ACP] Failed to apply pending config option "${configId}": ${error instanceof Error ? error.message : String(error)}`
+              );
+            }
+          })
+        );
       }
 
       // Emit initial model info after session setup completes
@@ -602,7 +620,6 @@ export class AcpAgent {
    */
   async kill(): Promise<void> {
     await this.connection.disconnect();
-    this.emitStatusMessage('disconnected');
     // Clear session-scoped caches when session ends
     this.approvalStore.clear();
     this.permissionRequestMeta.clear();
@@ -619,6 +636,9 @@ export class AcpAgent {
   async sendMessage(data: { content: string; files?: string[]; msg_id?: string }): Promise<AcpResult> {
     const sendStart = Date.now();
     try {
+      this.turnHasThought = false;
+      this.turnHasContent = false;
+
       // Auto-reconnect if connection is lost (e.g., after unexpected process exit)
       if (!this.connection.isConnected || !this.connection.hasActiveSession) {
         const reconnectStart = Date.now();
@@ -1158,6 +1178,12 @@ export class AcpAgent {
   }
 
   private handleEndTurn(): void {
+    if (this.turnHasThought && !this.turnHasContent) {
+      console.warn(
+        `[ACP-STREAM] End turn with thought but no content (conversation=${this.id}, backend=${this.extra.backend})`
+      );
+    }
+
     // 使用信号回调发送 end_turn 事件，不添加到消息列表
     if (this.onSignalEvent) {
       this.onSignalEvent({
@@ -1198,21 +1224,7 @@ export class AcpAgent {
    * Notify frontend and clean up internal state
    */
   private handleDisconnect(error: { code: number | null; signal: NodeJS.Signals | null }): void {
-    // 1. Emit disconnected status to frontend
-    this.emitStatusMessage('disconnected');
-
-    // 2. Emit error message with helpful information
-    const disconnectReason = this.expectedDisconnectReason;
-    this.expectedDisconnectReason = null;
-    const errorMsg =
-      disconnectReason === 'idle_timeout'
-        ? 'Session closed after 30 minutes of inactivity. Send a new message to reconnect.'
-        : `${this.extra.backend} process disconnected unexpectedly ` +
-          `(code: ${error.code}, signal: ${error.signal}). ` +
-          `Please try sending a new message to reconnect.`;
-    this.emitErrorMessage(errorMsg);
-
-    // 3. Emit finish signal to reset UI loading state
+    // Emit finish signal to reset UI loading state
     if (this.onSignalEvent) {
       this.onSignalEvent({
         type: 'finish',
@@ -1222,7 +1234,7 @@ export class AcpAgent {
       });
     }
 
-    // 4. Clear internal state
+    // Clear internal state
     this.pendingPermissions.clear();
     this.permissionRequestMeta.clear();
     this.approvalStore.clear();
@@ -1298,9 +1310,7 @@ export class AcpAgent {
     return content.slice(0, 500) + '\n... (truncated)';
   }
 
-  private emitStatusMessage(
-    status: 'connecting' | 'connected' | 'authenticated' | 'session_active' | 'disconnected' | 'error'
-  ): void {
+  private emitStatusMessage(status: 'connecting' | 'connected' | 'authenticated' | 'session_active' | 'error'): void {
     // Use fixed ID for status messages so they update instead of duplicate
     if (!this.statusMessageId) {
       this.statusMessageId = uuid();
@@ -1422,6 +1432,7 @@ export class AcpAgent {
     // Map TMessage types to backend response types
     switch (message.type) {
       case 'text':
+        this.turnHasContent = true;
         responseMessage.type = 'content';
         responseMessage.data = message.content.content;
         break;
@@ -1436,6 +1447,7 @@ export class AcpAgent {
       case 'tips':
         // Distinguish between thought messages and error messages
         if (message.content.type === 'warning' && message.position === 'center') {
+          this.turnHasThought = true;
           const subject = this.extractThoughtSubject(message.content.content);
           responseMessage.type = 'thought';
           responseMessage.data = {
@@ -1562,15 +1574,10 @@ export class AcpAgent {
       }
 
       // Inject team MCP server if this agent belongs to a team (stdio mode)
-      const teamMcpStdioConfig = this.extra.teamMcpStdioConfig;
-      if (teamMcpStdioConfig && teamMcpStdioConfig.command) {
-        servers.push({
-          name: teamMcpStdioConfig.name,
-          command: teamMcpStdioConfig.command,
-          args: teamMcpStdioConfig.args,
-          env: teamMcpStdioConfig.env,
-        });
-        mainLog(`[ACP ${this.extra.backend}]`, `Injecting team MCP server (stdio): ${teamMcpStdioConfig.name}`);
+      const teamServer = buildTeamMcpServer(this.extra.teamMcpStdioConfig);
+      if (teamServer) {
+        servers.push(teamServer);
+        mainLog(`[ACP ${this.extra.backend}]`, `Injecting team MCP server (stdio): ${teamServer.name}`);
       }
 
       if (servers.length > 0) {

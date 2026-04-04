@@ -6,7 +6,9 @@
 
 import { ipcBridge } from '@/common';
 import AgentModeSelector from '@/renderer/components/agent/AgentModeSelector';
+import AcpConfigSelector from '@/renderer/components/agent/AcpConfigSelector';
 import { getAgentModes, supportsModeSwitch, type AgentModeOption } from '@/renderer/utils/model/agentModes';
+import type { AcpSessionConfigOption } from '@/common/types/acpTypes';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { getCleanFileNames, FileService, MAX_UPLOAD_SIZE_MB } from '@/renderer/services/FileService';
 import { iconColors } from '@/renderer/styles/colors';
@@ -46,6 +48,11 @@ type GuidActionRowProps = {
   onAgentSwitch?: (key: string) => void;
   hidePresetTag?: boolean;
 
+  // Config options (ACP)
+  configOptionsBackend?: AcpBackend;
+  cachedConfigOptions?: AcpSessionConfigOption[];
+  onConfigOptionSelect?: (configId: string, value: string) => void;
+
   // Send button
   loading: boolean;
   isButtonDisabled: boolean;
@@ -71,6 +78,9 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   agentLogo,
   agentSwitcherItems,
   onAgentSwitch,
+  configOptionsBackend,
+  cachedConfigOptions,
+  onConfigOptionSelect,
   hidePresetTag = false,
   loading,
   isButtonDisabled,
@@ -239,6 +249,11 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               modeLabelFormatter={getModeDisplayLabel}
             />
           )}
+          <AcpConfigSelector
+            backend={configOptionsBackend}
+            initialConfigOptions={cachedConfigOptions}
+            onOptionSelect={onConfigOptionSelect}
+          />
         </div>
 
         {!hidePresetTag && isPresetAgent && selectedAgentInfo && (

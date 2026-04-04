@@ -21,6 +21,7 @@ import {
   PREVIEW_GEMINI_MODEL_AUTO,
   loadSkillsFromDir,
 } from '@office-ai/aioncli-core';
+import type { HierarchicalMemory } from '@office-ai/aioncli-core/dist/src/config/memory.js';
 import process from 'node:process';
 import path from 'node:path';
 import type { Settings } from './settings';
@@ -34,7 +35,7 @@ const logger = {
   error: (...args: unknown[]) => console.error('[ERROR]', ...args),
 };
 
-const EMPTY_HIERARCHICAL_MEMORY = {
+const EMPTY_HIERARCHICAL_MEMORY: Required<HierarchicalMemory> = {
   global: '',
   extension: '',
   project: '',
@@ -207,7 +208,7 @@ export async function loadCliConfig({
   // Directly use aioncli-core's loadServerHierarchicalMemory with ExtensionLoader
   const extensionLoader = new SimpleExtensionLoader(allExtensions);
   const folderTrust = true; // 默认信任工作区 / Default to trusting the workspace
-  let memoryContent = { ...EMPTY_HIERARCHICAL_MEMORY };
+  let memoryContent: HierarchicalMemory = { ...EMPTY_HIERARCHICAL_MEMORY };
   let fileCount = 0;
 
   try {

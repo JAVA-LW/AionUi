@@ -261,6 +261,10 @@ export const createAcpAgent = async (options: ICreateConversationParams): Promis
       currentModelId: extra.currentModelId,
       // Pre-selected ACP config options from Guid page (e.g. reasoning effort)
       configOptionValues: extra.configOptionValues,
+      // Cached config options for immediate conversation render
+      cachedConfigOptions: extra.cachedConfigOptions,
+      // Pending config option selections to apply on first ACP session start
+      pendingConfigOptions: extra.pendingConfigOptions,
       // Explicit marker for temporary health-check conversations
       isHealthCheck: extra.isHealthCheck,
       // Team ownership — used by sidebar filter to hide team-owned conversations

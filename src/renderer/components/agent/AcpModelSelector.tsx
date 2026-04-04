@@ -251,6 +251,7 @@ const AcpModelSelector: React.FC<{
   });
   const compact = isPreviewOpen || layout?.isMobile;
   const isMobileCompact = Boolean(layout?.isMobile);
+
   useEffect(() => {
     setDropdownVisible(false);
     setTooltipVisible(false);

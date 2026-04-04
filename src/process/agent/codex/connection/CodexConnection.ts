@@ -226,7 +226,7 @@ export class CodexConnection {
     }
   }
 
-  start(
+  async start(
     cliPath: string,
     cwd: string,
     args: string[] = [],
@@ -237,7 +237,7 @@ export class CodexConnection {
     console.log(`[Codex-Startup] process.env.PATH (first 200): ${(process.env.PATH || '(empty)').substring(0, 200)}`);
 
     // Build full shell environment for Codex (needs complete env, not just whitelisted vars)
-    const fullShellEnv = loadFullShellEnvironment();
+    const fullShellEnv = await loadFullShellEnvironment();
     const shellVarCount = Object.keys(fullShellEnv).length;
     console.log(`[Codex-Startup] Full shell env: ${shellVarCount} vars loaded`);
 

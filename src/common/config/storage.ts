@@ -59,7 +59,7 @@ export interface IConfigStorageRefer {
   'acp.customAgents'?: AcpBackendConfig[];
   // Cached model lists per ACP backend for Guid page pre-selection
   'acp.cachedModels'?: Record<string, import('@/common/types/acpTypes').AcpModelInfo>;
-  // Cached ACP config options per backend for Guid page pre-selection
+  // Cached config options per ACP backend for Guid page pre-selection
   'acp.cachedConfigOptions'?: Record<string, import('@/common/types/acpTypes').AcpSessionConfigOption[]>;
   'model.config': IProvider[];
   'mcp.config': IMcpServer[];
@@ -266,7 +266,12 @@ export type TChatConversation =
           sessionMode?: string;
           /** Persisted model ID for resume support / 持久化的模型 ID，用于恢复 */
           currentModelId?: string;
+          /** Persisted config option values for resume support / 持久化的配置项值，用于恢复 */
           configOptionValues?: Record<string, string>;
+          /** Cached config options from ACP backend / 缓存的 ACP 配置选项 */
+          cachedConfigOptions?: import('@/common/types/acpTypes').AcpSessionConfigOption[];
+          /** Pending config option selections from Guid page / Guid 页面待应用的配置选项 */
+          pendingConfigOptions?: Record<string, string>;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
           /** Cron job ID that spawned this conversation */

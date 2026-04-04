@@ -27,7 +27,6 @@ import {
 import type { ChildProcess } from 'child_process';
 import { execFile as execFileCb, spawn } from 'child_process';
 import { promisify } from 'util';
-import { buildAcpModelInfo, summarizeAcpModelInfo } from './modelInfo';
 import type { AcpSessionMcpServer } from './mcpSessionConfig';
 import { mainLog, mainWarn } from '@process/utils/mainLogger';
 import { promises as fs } from 'fs';
@@ -194,8 +193,8 @@ export class AcpConnection {
     await this.setupChildProcessHandlers(backend);
   }
 
-  private prepareNpxEnv(): Record<string, string | undefined> {
-    return prepareCleanEnv();
+  private async prepareNpxEnv(): Promise<Record<string, string | undefined>> {
+    return await prepareCleanEnv();
   }
 
   private ensureMinNodeVersion(
@@ -243,7 +242,7 @@ export class AcpConnection {
       if (AcpConnection.NPX_BACKENDS.has(backend) && /notarget|no matching version/i.test(errMsg)) {
         console.warn(`[ACP] Detected stale npm cache for ${backend}, cleaning and retrying...`);
         try {
-          const cleanEnv = prepareCleanEnv();
+          const cleanEnv = await prepareCleanEnv();
           const npmPath = resolveNpxPath(cleanEnv)
             .replace(/npx$/, 'npm')
             .replace(/npx\.cmd$/, 'npm.cmd');
@@ -362,7 +361,7 @@ export class AcpConnection {
     console.error('[ACP] Using NPX approach for Claude ACP bridge');
 
     const envStart = Date.now();
-    const cleanEnv = this.prepareNpxEnv();
+    const cleanEnv = await this.prepareNpxEnv();
     if (ACP_PERF_LOG) console.log(`[ACP-PERF] connect: env prepared ${Date.now() - envStart}ms`);
 
     this.ensureMinNodeVersion(cleanEnv, 20, 10, 'Claude ACP bridge');
@@ -448,7 +447,7 @@ export class AcpConnection {
     console.error(`[ACP] Using NPX approach for Codex ACP bridge (${CODEX_ACP_NPX_PACKAGE})`);
 
     const envStart = Date.now();
-    const cleanEnv = this.prepareNpxEnv();
+    const cleanEnv = await this.prepareNpxEnv();
     if (ACP_PERF_LOG) console.log(`[ACP-PERF] codex: env prepared ${Date.now() - envStart}ms`);
 
     this.ensureMinNodeVersion(cleanEnv, 20, 10, 'Codex ACP bridge');
@@ -567,7 +566,7 @@ export class AcpConnection {
     console.error('[ACP] Using NPX approach for CodeBuddy ACP');
 
     const envStart = Date.now();
-    const cleanEnv = this.prepareNpxEnv();
+    const cleanEnv = await this.prepareNpxEnv();
     if (ACP_PERF_LOG) console.log(`[ACP-PERF] codebuddy: env prepared ${Date.now() - envStart}ms`);
 
     this.ensureMinNodeVersion(cleanEnv, 20, 10, 'CodeBuddy ACP');
@@ -1261,17 +1260,6 @@ export class AcpConnection {
     const modelsSource = result.models || (result._meta as Record<string, unknown> | undefined)?.models;
     if (modelsSource && typeof modelsSource === 'object') {
       this.models = modelsSource as AcpSessionModels;
-    }
-    if (this.backend === 'codex') {
-      const unifiedModelInfo = buildAcpModelInfo(this.configOptions, this.models);
-      const modelOption = this.configOptions?.find((opt) => opt.category === 'model');
-      mainLog('[ACP codex]', 'session capabilities parsed', {
-        rawCurrentModelId: this.models?.currentModelId || null,
-        rawAvailableModelCount: this.models?.availableModels?.length || 0,
-        configOptionModelCount:
-          modelOption && modelOption.type === 'select' && modelOption.options ? modelOption.options.length : 0,
-        unified: summarizeAcpModelInfo(unifiedModelInfo),
-      });
     }
   }
 
