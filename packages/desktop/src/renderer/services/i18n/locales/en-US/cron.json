@@ -81,6 +81,8 @@
       "prompt": "Prompt",
       "promptRequired": "Prompt is required",
       "promptPlaceholder": "Instructions for the assistant to execute",
+      "queue": "Queue protection",
+      "queueHint": "When enabled, a new trigger is skipped while the previous scheduled conversation is still running, without interrupting the assistant.",
       "frequency": "Frequency",
       "cronExpr": "Cron Expression",
       "cronExprRequired": "Cron expression is required",

@@ -6,7 +6,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Form, Input, Select, Message, TimePicker, Radio, Button } from '@arco-design/web-react';
+import { Form, Input, Select, Message, TimePicker, Radio, Button, Switch } from '@arco-design/web-react';
 import ModalWrapper from '@renderer/components/base/ModalWrapper';
 import { Down, Robot } from '@icon-park/react';
 import { ipcBridge } from '@/common';
@@ -152,6 +152,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
 
   const isEditMode = !!editJob;
   const [execution_mode, setExecutionMode] = useState<ExecutionMode>('new_conversation');
+  const [queueEnabled, setQueueEnabled] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [teamOwnershipStatus, setTeamOwnershipStatus] = useState<'checking' | 'team' | 'standalone'>('standalone');
 
@@ -175,6 +176,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       setWeekday(parsed.weekday);
       setCustomCronExpr(parsed.frequency === 'custom' ? cronExpr : '');
       setExecutionMode(editJob.target.execution_mode || 'existing');
+      setQueueEnabled(editJob.state.queue_enabled);
       setSelectedAssistantId(agentKey);
       setAdvancedOpen(
         Boolean(
@@ -200,6 +202,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       setWeekday('MON');
       setCustomCronExpr('');
       setExecutionMode('new_conversation');
+      setQueueEnabled(false);
       setAdvancedOpen(false);
       setModelId(undefined);
       setConfigOptions(undefined);
@@ -470,6 +473,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
           metadata,
           state: {
             max_retries: editJob!.state.max_retries,
+            queue_enabled: queueEnabled,
           },
         };
 
@@ -488,6 +492,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
           conversation_title,
           created_by: 'user',
           execution_mode: resolvedExecutionMode,
+          queue_enabled: queueEnabled,
           agent_config,
         };
         await ipcBridge.cron.addJob.invoke(params);
@@ -626,6 +631,14 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
           >
             <TextArea placeholder={t('cron.page.form.promptPlaceholder')} autoSize={{ minRows: 3, maxRows: 8 }} />
           </FormItem>
+
+          <div className='mb-20px flex items-start justify-between gap-16px rounded-12px border border-solid border-[var(--color-border-2)] px-14px py-12px'>
+            <div className='min-w-0'>
+              <p className='m-0 text-14px font-medium text-t-primary'>{t('cron.page.form.queue')}</p>
+              <p className='mb-0 mt-4px text-12px leading-18px text-t-secondary'>{t('cron.page.form.queueHint')}</p>
+            </div>
+            <Switch checked={queueEnabled} onChange={setQueueEnabled} />
+          </div>
 
           {/* Frequency */}
           <FormItem label={t('cron.page.form.frequency')}>

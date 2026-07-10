@@ -83,6 +83,8 @@
       "prompt": "Prompt",
       "promptRequired": "El prompt es obligatorio",
       "promptPlaceholder": "Instrucciones para que el agente ejecute",
+      "queue": "Protección de cola",
+      "queueHint": "Cuando está activada, se omite una nueva ejecución mientras la conversación programada anterior siga en curso, sin interrumpir al asistente.",
       "frequency": "Frecuencia",
       "cronExpr": "Expresión Cron",
       "cronExprRequired": "La expresión cron es obligatoria",

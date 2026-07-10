@@ -81,6 +81,8 @@
       "prompt": "Prompt",
       "promptRequired": "Prompt é obrigatório",
       "promptPlaceholder": "Instruções para o assistente executar",
+      "queue": "Proteção de fila",
+      "queueHint": "Quando ativada, uma nova execução é ignorada enquanto a conversa agendada anterior ainda estiver em andamento, sem interromper o assistente.",
       "frequency": "Frequência",
       "cronExpr": "Expressão Cron",
       "cronExprRequired": "A expressão Cron é obrigatória",

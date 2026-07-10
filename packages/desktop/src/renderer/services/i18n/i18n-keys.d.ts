@@ -763,6 +763,8 @@ export type I18nKey =
   | 'cron.page.form.prompt'
   | 'cron.page.form.promptPlaceholder'
   | 'cron.page.form.promptRequired'
+  | 'cron.page.form.queue'
+  | 'cron.page.form.queueHint'
   | 'cron.page.form.scheduleDesc'
   | 'cron.page.form.scheduleDescPlaceholder'
   | 'cron.page.form.scheduleDescRequired'
