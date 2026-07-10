@@ -126,6 +126,20 @@
       "dailyAt": "Каждый день в {{time}}",
       "weekdaysAt": "По будням в {{time}}",
       "weeklyAt": "Каждый {{day}} в {{time}}"
+    },
+    "custom": {
+      "modeLabel": "Режим повтора",
+      "interval": "Через интервал",
+      "monthly": "Ежемесячно",
+      "advanced": "Расширенное Cron-выражение",
+      "every": "Каждые",
+      "unit": "Единица",
+      "minutes": "Минуты",
+      "hours": "Часы",
+      "time": "Время",
+      "weekdays": "Дни недели",
+      "monthDay": "День месяца",
+      "preview": "Созданное Cron-выражение"
     }
   },
   "trigger": {

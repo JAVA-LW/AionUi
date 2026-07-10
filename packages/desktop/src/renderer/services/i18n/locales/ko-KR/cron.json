@@ -127,6 +127,20 @@
       "dailyAt": "매일 {{time}}에 실행",
       "weekdaysAt": "평일 {{time}}에 실행",
       "weeklyAt": "매주 {{day}} {{time}}에 실행"
+    },
+    "custom": {
+      "modeLabel": "반복 방식",
+      "interval": "간격마다",
+      "monthly": "매월",
+      "advanced": "고급 Cron 표현식",
+      "every": "간격",
+      "unit": "단위",
+      "minutes": "분",
+      "hours": "시간",
+      "time": "시간",
+      "weekdays": "요일",
+      "monthDay": "매월 날짜",
+      "preview": "생성된 Cron"
     }
   },
   "trigger": {

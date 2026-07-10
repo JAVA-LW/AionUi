@@ -127,6 +127,20 @@
       "dailyAt": "每天 {{time}} 执行",
       "weekdaysAt": "工作日 {{time}} 执行",
       "weeklyAt": "每周{{day}} {{time}} 执行"
+    },
+    "custom": {
+      "modeLabel": "重复方式",
+      "interval": "每隔",
+      "monthly": "每月",
+      "advanced": "高级 Cron 表达式",
+      "every": "每隔",
+      "unit": "单位",
+      "minutes": "分钟",
+      "hours": "小时",
+      "time": "时间",
+      "weekdays": "星期",
+      "monthDay": "每月日期",
+      "preview": "生成的 Cron"
     }
   },
   "trigger": {

@@ -164,14 +164,33 @@ describe('CreateTaskDialog', () => {
     expect(await screen.findByText('cron.page.freq.custom')).toBeInTheDocument();
   });
 
-  it('submits the entered custom cron expression', async () => {
+  it('submits the default visual custom schedule as every five minutes', async () => {
     const user = userEvent.setup();
-    const editJob = job();
 
-    render(<CreateTaskDialog visible onClose={() => {}} editJob={editJob} />);
+    render(<CreateTaskDialog visible onClose={() => {}} editJob={job()} />);
 
     await user.click(await screen.findByTestId('cron-frequency-select'));
     fireEvent.click(await screen.findByText('cron.page.freq.custom'));
+    expect(await screen.findByText('*/5 * * * *')).toBeInTheDocument();
+    await user.click(screen.getByTestId('modal-ok'));
+
+    await waitFor(() => expect(ipcBridge.cron.updateJob.invoke).toHaveBeenCalledTimes(1));
+    const [{ updates }] = vi.mocked(ipcBridge.cron.updateJob.invoke).mock.calls[0];
+    expect(updates.schedule).toMatchObject({
+      kind: 'cron',
+      expr: '*/5 * * * *',
+    });
+  });
+
+  it('keeps advanced cron input available for complex expressions', async () => {
+    const user = userEvent.setup();
+
+    render(<CreateTaskDialog visible onClose={() => {}} editJob={job()} />);
+
+    await user.click(await screen.findByTestId('cron-frequency-select'));
+    fireEvent.click(await screen.findByText('cron.page.freq.custom'));
+    await user.click(await screen.findByTestId('custom-frequency-mode'));
+    fireEvent.click(await screen.findByText('cron.page.custom.advanced'));
     const cronInput = await screen.findByTestId('custom-cron-expression');
     await user.type(cronInput, '*/15 9-18 * * MON-FRI');
     await user.click(screen.getByTestId('modal-ok'));
@@ -184,18 +203,21 @@ describe('CreateTaskDialog', () => {
     });
   });
 
-  it('does not save a custom schedule without a cron expression', async () => {
+  it('does not save advanced mode without a cron expression', async () => {
     const user = userEvent.setup();
 
     render(<CreateTaskDialog visible onClose={() => {}} editJob={job()} />);
 
     await user.click(await screen.findByTestId('cron-frequency-select'));
     fireEvent.click(await screen.findByText('cron.page.freq.custom'));
+    await user.click(await screen.findByTestId('custom-frequency-mode'));
+    fireEvent.click(await screen.findByText('cron.page.custom.advanced'));
     await user.click(screen.getByTestId('modal-ok'));
 
     expect(await screen.findByText('cron.page.form.cronExprRequired')).toBeInTheDocument();
     expect(ipcBridge.cron.updateJob.invoke).not.toHaveBeenCalled();
   });
+
   it('does not reset edited prompt text when the assistant catalog refreshes in edit mode', async () => {
     const user = userEvent.setup();
     const editJob = job();

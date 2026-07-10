@@ -139,6 +139,20 @@
       "dailyAt": "毎日 {{time}} に実行",
       "weekdaysAt": "平日 {{time}} に実行",
       "weeklyAt": "毎週{{day}} {{time}} に実行"
+    },
+    "custom": {
+      "modeLabel": "繰り返し方法",
+      "interval": "間隔ごと",
+      "monthly": "毎月",
+      "advanced": "高度な Cron 式",
+      "every": "間隔",
+      "unit": "単位",
+      "minutes": "分",
+      "hours": "時間",
+      "time": "時刻",
+      "weekdays": "曜日",
+      "monthDay": "日付",
+      "preview": "生成された Cron"
     }
   },
   "trigger": {

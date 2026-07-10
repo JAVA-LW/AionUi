@@ -131,7 +131,21 @@
       "weeklyAt": "Cada {{day}} a las {{time}}"
     },
     "createViaChat": "Create via chat",
-    "createManually": "Create manually"
+    "createManually": "Create manually",
+    "custom": {
+      "modeLabel": "Patrón de repetición",
+      "interval": "Cada intervalo",
+      "monthly": "Mensualmente",
+      "advanced": "Expresión Cron avanzada",
+      "every": "Cada",
+      "unit": "Unidad",
+      "minutes": "Minutos",
+      "hours": "Horas",
+      "time": "Hora",
+      "weekdays": "Días de la semana",
+      "monthDay": "Día del mes",
+      "preview": "Cron generado"
+    }
   },
   "trigger": {
     "runScheduledTask": "Ejecutar tarea programada: {{name}}"

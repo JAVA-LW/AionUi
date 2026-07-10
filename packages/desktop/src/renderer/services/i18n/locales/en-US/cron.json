@@ -126,6 +126,20 @@
       "dailyAt": "Every day at {{time}}",
       "weekdaysAt": "Weekdays at {{time}}",
       "weeklyAt": "Every {{day}} at {{time}}"
+    },
+    "custom": {
+      "modeLabel": "Repeat pattern",
+      "interval": "Every interval",
+      "monthly": "Monthly",
+      "advanced": "Advanced Cron expression",
+      "every": "Every",
+      "unit": "Unit",
+      "minutes": "Minutes",
+      "hours": "Hours",
+      "time": "Time",
+      "weekdays": "Weekdays",
+      "monthDay": "Day of month",
+      "preview": "Generated Cron"
     }
   },
   "trigger": {

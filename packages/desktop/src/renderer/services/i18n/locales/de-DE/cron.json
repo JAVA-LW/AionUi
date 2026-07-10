@@ -126,6 +126,20 @@
       "dailyAt": "Täglich um {{time}}",
       "weekdaysAt": "Werktags um {{time}}",
       "weeklyAt": "Jeden {{day}} um {{time}}"
+    },
+    "custom": {
+      "modeLabel": "Wiederholungsmuster",
+      "interval": "In Intervallen",
+      "monthly": "Monatlich",
+      "advanced": "Erweiterter Cron-Ausdruck",
+      "every": "Alle",
+      "unit": "Einheit",
+      "minutes": "Minuten",
+      "hours": "Stunden",
+      "time": "Uhrzeit",
+      "weekdays": "Wochentage",
+      "monthDay": "Tag des Monats",
+      "preview": "Generierter Cron-Ausdruck"
     }
   },
   "trigger": {
