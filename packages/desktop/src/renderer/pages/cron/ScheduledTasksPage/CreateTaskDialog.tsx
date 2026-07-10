@@ -642,20 +642,25 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
 
           {/* Frequency */}
           <FormItem label={t('cron.page.form.frequency')}>
-            <Select value={frequency} onChange={handleFrequencyChange}>
+            <Select data-testid='cron-frequency-select' value={frequency} onChange={handleFrequencyChange}>
               <Option value='manual'>{t('cron.page.freq.manual')}</Option>
               <Option value='hourly'>{t('cron.page.freq.hourly')}</Option>
               <Option value='daily'>{t('cron.page.freq.daily')}</Option>
               <Option value='weekdays'>{t('cron.page.freq.weekdays')}</Option>
               <Option value='weekly'>{t('cron.page.freq.weekly')}</Option>
-              {frequency === 'custom' && <Option value='custom'>{t('cron.page.freq.custom')}</Option>}
+              <Option value='custom'>{t('cron.page.freq.custom')}</Option>
             </Select>
-            {frequency === 'custom' && (
-              <p className='mb-0 mt-8px text-12px leading-18px text-t-secondary'>
-                {t('cron.page.customCronWarning', { expr: customCronExpr })}
-              </p>
-            )}
           </FormItem>
+
+          {frequency === 'custom' && (
+            <FormItem
+              label={t('cron.page.form.cronExpr')}
+              field='customCronExpr'
+              rules={[{ required: true, message: t('cron.page.form.cronExprRequired') }]}
+            >
+              <Input data-testid='custom-cron-expression' value={customCronExpr} onChange={setCustomCronExpr} />
+            </FormItem>
+          )}
 
           {/* Time picker - shown for daily/weekdays/weekly */}
           {showTimePicker && (
