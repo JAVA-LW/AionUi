@@ -254,6 +254,27 @@ export type TChatConversation =
     >
   | Omit<
       IChatConversation<
+        'codex-app-server',
+        {
+          workspace: string;
+          custom_workspace?: boolean;
+          backend?: 'codex-native';
+          agent_id?: string;
+          agent_source?: string;
+          codex_thread_id?: string;
+          codex_source?: string;
+          codex_live_state?: 'live' | 'stored_only';
+          codex_watched_root?: string;
+          cron_job_id?: string;
+          preset_assistant_id?: string;
+          pinned?: boolean;
+          pinned_at?: number;
+        }
+      >,
+      'model'
+    >
+  | Omit<
+      IChatConversation<
         'openclaw-gateway',
         {
           workspace?: string;

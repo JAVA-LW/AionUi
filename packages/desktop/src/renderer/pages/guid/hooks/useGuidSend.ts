@@ -11,6 +11,7 @@ import { emitter } from '@/renderer/utils/emitter';
 import { updateWorkspaceTime } from '@/renderer/utils/workspace/workspaceHistory';
 import { Message } from '@arco-design/web-react';
 import { useCallback, useRef } from 'react';
+import { codexNativeInitialMessageKey } from '@/renderer/pages/conversation/platforms/codex/storage';
 import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
 import { mutate as swrMutate } from 'swr';
@@ -244,7 +245,11 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
         input,
         files: files.length > 0 ? files : undefined,
       };
-      sessionStorage.setItem(`acp_initial_message_${conversation.id}`, JSON.stringify(initialMessage));
+      const initialMessageKey =
+        assistantBackend === 'codex-native'
+          ? codexNativeInitialMessageKey(conversation.id)
+          : `acp_initial_message_${conversation.id}`;
+      sessionStorage.setItem(initialMessageKey, JSON.stringify(initialMessage));
 
       await navigate(`/conversation/${conversation.id}`);
     } catch (error: unknown) {

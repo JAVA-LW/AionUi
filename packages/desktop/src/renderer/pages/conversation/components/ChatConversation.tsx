@@ -35,6 +35,7 @@ import { useConversationRuntimeView } from '../runtime/useConversationRuntimeVie
 import { isLegacyReadOnlyConversationType } from '../utils/conversationRuntime';
 import { resolveConversationBackend } from '../utils/conversationAssistantIdentity';
 import LegacyReadOnlyConversation from '../platforms/legacy/LegacyReadOnlyConversation';
+import CodexNativeChat from '../platforms/codex/CodexNativeChat';
 import { useActiveLease } from '../hooks/useActiveLease';
 // import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
@@ -289,6 +290,15 @@ const ChatConversation: React.FC<{
             assistantId={acpAssistantId}
           ></AcpChat>
         );
+      case 'codex-app-server':
+        return (
+          <CodexNativeChat
+            key={conversation.id}
+            conversation_id={conversation.id}
+            workspace={conversation.extra.workspace}
+            hideSendBox={resolvedHideSendBox}
+          />
+        );
       default:
         return null;
     }
@@ -330,6 +340,7 @@ const ChatConversation: React.FC<{
         />
       );
     }
+    if (conversation.type === 'codex-app-server') return undefined;
     return <GoogleModelSelector disabled={true} />;
   }, [conversation, isAionrsConversation, isMobile, isLegacyReadOnlyConversation, resolvedConversationBackend]);
 
