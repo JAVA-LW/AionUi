@@ -36,6 +36,7 @@ import { isLegacyReadOnlyConversationType } from '../utils/conversationRuntime';
 import { resolveConversationBackend } from '../utils/conversationAssistantIdentity';
 import LegacyReadOnlyConversation from '../platforms/legacy/LegacyReadOnlyConversation';
 import CodexNativeChat from '../platforms/codex/CodexNativeChat';
+import CodexSubagentControl, { CodexSubagentParentLink } from '../platforms/codex/CodexSubagentControl';
 import { useActiveLease } from '../hooks/useActiveLease';
 // import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
@@ -253,7 +254,10 @@ const ChatConversation: React.FC<{
 
   const isAionrsConversation = conversation?.type === 'aionrs';
   const isLegacyReadOnlyConversation = isLegacyReadOnlyConversationType(conversation?.type);
-  const resolvedHideSendBox = hideSendBox || isLegacyReadOnlyConversationType(conversation?.type);
+  const codexDirectInputDisabled =
+    conversation?.type === 'codex-app-server' && conversation.extra.codex_can_accept_direct_input === false;
+  const resolvedHideSendBox =
+    hideSendBox || isLegacyReadOnlyConversationType(conversation?.type) || codexDirectInputDisabled;
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)
@@ -367,6 +371,14 @@ const ChatConversation: React.FC<{
         <div className='shrink-0'>
           <CronJobManager conversation_id={conversation.id} cron_job_id={cronJobId} />
         </div>
+      )}
+      {conversation?.type === 'codex-app-server' &&
+        (conversation.extra.codex_thread_role !== 'subagent' ||
+          (conversation.extra.codex_subagent_total_count ?? 0) > 0) && (
+          <CodexSubagentControl conversation={conversation} />
+        )}
+      {conversation?.type === 'codex-app-server' && conversation.extra.codex_thread_role === 'subagent' && (
+        <CodexSubagentParentLink conversation={conversation} />
       )}
       {modelSelector && <div className='shrink-0'>{modelSelector}</div>}
     </div>

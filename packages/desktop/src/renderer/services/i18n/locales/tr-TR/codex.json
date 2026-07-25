@@ -1,5 +1,18 @@
 {
   "sendbox": {},
+  "subagents": {
+    "title": "Sub-agents",
+    "running": "Running",
+    "completed": "Completed",
+    "started": "Started",
+    "back": "Back",
+    "send": "Send",
+    "empty": "No sub-agents",
+    "noMessages": "No messages yet",
+    "replyPlaceholder": "Reply to this sub-agent...",
+    "parentControlled": "This sub-agent is controlled by its parent task.",
+    "openFullConversation": "Open full conversation"
+  },
   "network": {
     "cloudflare_blocked": "Cloudflare koruması {{service}} erişimini engelledi. Öneriler: 1) VPN kullanın 2) Ağı değiştirin 3) Daha sonra tekrar deneyin 4) Diğer AI servislerine geçin",
     "network_timeout": "Ağ zaman aşımı, bağlantı otomatik olarak tekrar deneniyor...",

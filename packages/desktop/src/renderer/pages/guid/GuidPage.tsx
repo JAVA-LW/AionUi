@@ -405,7 +405,7 @@ const GuidPage: React.FC = () => {
         } else {
           await modelSelection.resetCurrentModel({ persistPreference: false });
         }
-      } else if (shouldApplyDefaultModel && resolvedDefaults.modelId) {
+      } else if (shouldApplyDefaultModel && effectiveBackend !== 'codex-native' && resolvedDefaults.modelId) {
         const availableModelIds = new Set(agentSelection.currentAcpCachedModelInfo?.available_models.map((m) => m.id));
         agentSelection.setSelectedAcpModel(
           availableModelIds.size === 0 || availableModelIds.has(resolvedDefaults.modelId)
@@ -413,7 +413,7 @@ const GuidPage: React.FC = () => {
             : null,
           { persistPreference: false }
         );
-      } else if (shouldApplyDefaultModel) {
+      } else if (shouldApplyDefaultModel && effectiveBackend !== 'codex-native') {
         agentSelection.setSelectedAcpModel(null, { persistPreference: false });
       }
 
@@ -548,6 +548,7 @@ const GuidPage: React.FC = () => {
   // Only aionrs now — Gemini runs as a regular ACP backend with ACP-cached models.
   const PROVIDER_BASED_AGENTS = new Set(['aionrs']);
   const isGeminiMode = PROVIDER_BASED_AGENTS.has(agentSelection.selectedAssistantBackend);
+  const isCodexNative = agentSelection.selectedAssistantBackend === 'codex-native';
 
   // Build the mention dropdown node
   // Build the model selector node
@@ -590,14 +591,14 @@ const GuidPage: React.FC = () => {
       onThoughtLevelSelect={setGuidSelectedThoughtLevel}
       modeBackend={agentSelection.selectedAssistantBackend}
       selectedMode={agentSelection.selectedMode}
-      dynamicModes={agentSelection.currentAgentModeOptions}
+      dynamicModes={isCodexNative ? [] : agentSelection.currentAgentModeOptions}
       onModeSelect={setGuidSelectedMode}
-      allSkills={allSkills}
-      disabledBuiltinSkills={guidDisabledBuiltinSkills ?? []}
-      enabledSkills={guidEnabledSkills ?? []}
+      allSkills={isCodexNative ? [] : allSkills}
+      disabledBuiltinSkills={isCodexNative ? [] : (guidDisabledBuiltinSkills ?? [])}
+      enabledSkills={isCodexNative ? [] : (guidEnabledSkills ?? [])}
       onToggleSkill={handleToggleSkill}
-      mcpServers={availableMcpServers}
-      selectedMcpServerIds={guidSelectedMcpServerIds ?? []}
+      mcpServers={isCodexNative ? [] : availableMcpServers}
+      selectedMcpServerIds={isCodexNative ? [] : (guidSelectedMcpServerIds ?? [])}
       onToggleMcpServer={handleToggleMcpServer}
       speechInputNode={
         <SpeechInputButton

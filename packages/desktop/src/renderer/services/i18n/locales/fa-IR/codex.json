@@ -1,5 +1,18 @@
 {
   "sendbox": {},
+  "subagents": {
+    "title": "Sub-agents",
+    "running": "Running",
+    "completed": "Completed",
+    "started": "Started",
+    "back": "Back",
+    "send": "Send",
+    "empty": "No sub-agents",
+    "noMessages": "No messages yet",
+    "replyPlaceholder": "Reply to this sub-agent...",
+    "parentControlled": "This sub-agent is controlled by its parent task.",
+    "openFullConversation": "Open full conversation"
+  },
   "network": {
     "cloudflare_blocked": " محافظت Cloudflare دسترسی به {{service}} را مسدود کرد. پیشنهادات: ۱) از VPN استفاده کنید ۲) شبکه را عوض کنید ۳) بعداً دوباره تلاش کنید ۴) به سرویس‌های هوش مصنوعی دیگر سوئیچ کنید",
     "network_timeout": "زمان اتصال به پایان رسید، در حال تلاش مجدد خودکار...",

@@ -23,6 +23,7 @@ const isGeneratingStreamMessage = (type: string): boolean => {
     type === 'thought' ||
     type === 'thinking' ||
     type === 'tool_group' ||
+    type === 'tool_call' ||
     type === 'acp_tool_call' ||
     type === 'acp_permission' ||
     type === 'permission' ||
@@ -101,6 +102,26 @@ type ConversationListSyncSnapshot = {
   completionUnreadConversationIds: Set<string>;
 };
 
+type ConversationStatusSnapshot = Pick<TChatConversation, 'id' | 'type' | 'status' | 'runtime'>;
+
+export const reconcileCodexGeneratingConversationIds = (
+  current: ReadonlySet<string>,
+  conversations: readonly ConversationStatusSnapshot[]
+): Set<string> => {
+  const next = new Set(current);
+  conversations.forEach((conversation) => {
+    if (conversation.type !== 'codex-app-server') {
+      return;
+    }
+    if (conversation.status === 'running' || conversation.runtime?.is_processing === true) {
+      next.add(conversation.id);
+    } else {
+      next.delete(conversation.id);
+    }
+  });
+  return next;
+};
+
 const listeners = new Set<() => void>();
 
 let isStoreInitialized = false;
@@ -140,6 +161,7 @@ const refreshConversations = () => {
     .then((result) => {
       const items = result?.items;
       if (items && Array.isArray(items)) {
+        generatingConversationIdsState = reconcileCodexGeneratingConversationIds(generatingConversationIdsState, items);
         const filteredData = items.filter((conv) => {
           // Legacy rows from the pre-provider-probe health check flow are hidden
           // from normal history. New health checks must not create conversations.

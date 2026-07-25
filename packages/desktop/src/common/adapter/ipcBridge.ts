@@ -367,6 +367,25 @@ export const conversation = {
   },
 };
 
+export type CodexNativeReasoningEffort = {
+  reasoningEffort: string;
+  description: string;
+};
+
+export type CodexNativeModel = {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  supportedReasoningEfforts: CodexNativeReasoningEffort[];
+  defaultReasoningEffort: string;
+  isDefault: boolean;
+};
+
+export const codexNative = {
+  listModels: httpGet<CodexNativeModel[], void>('/api/codex/models'),
+};
+
 export const runtime = {
   statusChanged: wsEmitter<IRuntimeStatusEvent>('runtime.statusChanged'),
 };
@@ -1090,13 +1109,24 @@ export const database = {
   getUserConversations: withResponseMap(
     httpGet<
       PaginatedResult<import('@/common/config/storage').TChatConversation>,
-      { cursor?: string; limit?: number; workspace?: string; pinned?: boolean }
+      {
+        cursor?: string;
+        limit?: number;
+        workspace?: string;
+        pinned?: boolean;
+        codex_root_only?: boolean;
+        codex_parent_conversation_id?: string;
+      }
     >((p) => {
       const params = new URLSearchParams();
       if (p.cursor) params.set('cursor', p.cursor);
       if (p.limit) params.set('limit', String(p.limit));
       if (p.workspace) params.set('workspace', p.workspace);
       if (p.pinned !== undefined) params.set('pinned', String(p.pinned));
+      if (p.codex_root_only !== undefined) params.set('codex_root_only', String(p.codex_root_only));
+      if (p.codex_parent_conversation_id) {
+        params.set('codex_parent_conversation_id', p.codex_parent_conversation_id);
+      }
       const qs = params.toString();
       return `/api/conversations${qs ? `?${qs}` : ''}`;
     }),
@@ -1553,6 +1583,7 @@ export interface ICreateConversationParams {
     selected_mcp_server_ids?: string[];
     selected_session_mcp_servers?: ISessionMcpServer[];
     codex_model?: string;
+    codex_reasoning_effort?: string;
     thought_level?: string;
     cached_config_options?: import('../types/platform/acpTypes').AcpSessionConfigOption[];
     pending_config_options?: Record<string, string>;

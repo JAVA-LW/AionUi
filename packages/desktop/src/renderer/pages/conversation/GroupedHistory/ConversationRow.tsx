@@ -53,6 +53,9 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const cronStatus = getJobStatus(conversation.id);
   const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
   const inlineNameTooltipEnabled = !collapsed && !isMobile && !!conversation.name;
+  const subagentRunningCount =
+    conversation.type === 'codex-app-server' ? (conversation.extra.codex_subagent_running_count ?? 0) : 0;
+  const effectiveGenerating = isGenerating || subagentRunningCount > 0;
 
   const renderLeadingIcon = () => {
     if (cronStatus !== 'none') {
@@ -118,7 +121,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   };
 
   const renderCompletionUnreadDot = () => {
-    if (batchMode || !hasCompletionUnread || isGenerating) {
+    if (batchMode || !hasCompletionUnread || effectiveGenerating) {
       return null;
     }
 
@@ -164,9 +167,9 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
           </span>
         )}
         <span className='size-22px flex items-center justify-center shrink-0 relative'>
-          {isGenerating && !batchMode ? <Spin size={16} /> : renderLeadingIcon()}
+          {effectiveGenerating && !batchMode ? <Spin size={16} /> : renderLeadingIcon()}
           {/* Pinned indicator: only visible when row is hovered, overlays leading icon */}
-          {!batchMode && isPinned && !isMobile && !isGenerating && (
+          {!batchMode && isPinned && !isMobile && !effectiveGenerating && (
             <span
               className='absolute inset-0 flex-center text-t-secondary pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity'
               style={{ lineHeight: 0 }}
@@ -185,8 +188,13 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             popupHoverStay={false}
             position='top'
           >
-            <div className='chat-history__item-name overflow-hidden text-ellipsis block w-full text-14px font-[500] lh-24px whitespace-nowrap min-w-0 text-t-primary'>
-              <span className='block overflow-hidden text-ellipsis whitespace-nowrap'>{conversation.name}</span>
+            <div className='chat-history__item-name flex items-center gap-6px w-full text-14px font-[500] lh-24px whitespace-nowrap min-w-0 text-t-primary'>
+              <span className='block overflow-hidden text-ellipsis whitespace-nowrap min-w-0'>{conversation.name}</span>
+              {subagentRunningCount > 0 && (
+                <span className='shrink-0 min-w-18px h-18px px-5px rounded-full bg-[rgba(var(--primary-6),0.12)] text-[rgb(var(--primary-6))] text-11px leading-18px text-center'>
+                  {subagentRunningCount}
+                </span>
+              )}
             </div>
           </Tooltip>
         </FlexFullContainer>

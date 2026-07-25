@@ -1,5 +1,18 @@
 {
   "sendbox": {},
+  "subagents": {
+    "title": "Sub-agents",
+    "running": "Running",
+    "completed": "Completed",
+    "started": "Started",
+    "back": "Back",
+    "send": "Send",
+    "empty": "No sub-agents",
+    "noMessages": "No messages yet",
+    "replyPlaceholder": "Reply to this sub-agent...",
+    "parentControlled": "This sub-agent is controlled by its parent task.",
+    "openFullConversation": "Open full conversation"
+  },
   "network": {
     "cloudflare_blocked": "Защита Cloudflare заблокировала доступ к {{service}}. Варианты: 1) Использовать VPN 2) Сменить сеть 3) Попробовать позже 4) Переключиться на другие ИИ-сервисы",
     "network_timeout": "Таймаут сети, автоматическое повторное подключение...",

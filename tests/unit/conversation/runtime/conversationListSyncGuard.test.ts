@@ -5,11 +5,22 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { getSidebarStreamGuardDecision } from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
+import {
+  getSidebarStreamGuardDecision,
+  reconcileCodexGeneratingConversationIds,
+} from '@/renderer/pages/conversation/GroupedHistory/hooks/useConversationListSync';
 
 describe('getSidebarStreamGuardDecision', () => {
   it('marks normal generating stream messages', () => {
     expect(getSidebarStreamGuardDecision({ type: 'content', completed: false })).toEqual({
+      markGenerating: true,
+      clearCompleted: false,
+      lateIgnored: false,
+    });
+  });
+
+  it('marks native Codex tool calls as generating', () => {
+    expect(getSidebarStreamGuardDecision({ type: 'tool_call', completed: false })).toEqual({
       markGenerating: true,
       clearCompleted: false,
       lateIgnored: false,
@@ -38,5 +49,17 @@ describe('getSidebarStreamGuardDecision', () => {
       clearCompleted: false,
       lateIgnored: false,
     });
+  });
+});
+
+describe('reconcileCodexGeneratingConversationIds', () => {
+  it('hydrates running Codex tasks and clears finished Codex tasks without changing other agents', () => {
+    const result = reconcileCodexGeneratingConversationIds(new Set(['finished-codex', 'active-acp']), [
+      { id: 'running-codex', type: 'codex-app-server', status: 'running' },
+      { id: 'finished-codex', type: 'codex-app-server', status: 'finished' },
+      { id: 'active-acp', type: 'acp', status: 'finished' },
+    ]);
+
+    expect([...result].toSorted()).toEqual(['active-acp', 'running-codex']);
   });
 });

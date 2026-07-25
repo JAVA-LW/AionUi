@@ -230,7 +230,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     [timelineSections]
   );
 
-  if (timelineSections.length === 0 && pinnedConversations.length === 0) {
+  if (timelineSections.length === 0 && pinnedConversations.length === 0 && projectGroups.length === 0) {
     return (
       <>
         {afterPinnedContent}

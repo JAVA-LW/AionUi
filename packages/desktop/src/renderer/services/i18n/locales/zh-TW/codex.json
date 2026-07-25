@@ -1,5 +1,18 @@
 {
   "sendbox": {},
+  "subagents": {
+    "title": "子智慧體",
+    "running": "執行中",
+    "completed": "完成",
+    "started": "已開始",
+    "back": "返回",
+    "send": "傳送",
+    "empty": "暫無子智慧體",
+    "noMessages": "暫無訊息",
+    "replyPlaceholder": "回覆這個子智慧體……",
+    "parentControlled": "此子智慧體由父任務控制，請從父任務介入。",
+    "openFullConversation": "在完整頁面開啟"
+  },
   "network": {
     "cloudflare_blocked": "Cloudflare 保護導致無法存取 {{service}}。建議：1）使用 VPN 2）切換網路 3）稍後重試 4）切換至其他 AI 服務",
     "network_timeout": "網路逾時，正在自動重試連線...",

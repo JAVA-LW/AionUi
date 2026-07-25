@@ -5,6 +5,8 @@
  */
 
 import { assistantRuntimeKey, isAionrsAssistant, type Assistant } from '@/common/types/agent/assistantTypes';
+import { ipcBridge } from '@/common';
+import type { CodexNativeModel } from '@/common/adapter/ipcBridge';
 import { configService } from '@/common/config/configService';
 import type { AcpModelInfo } from '../types';
 import type { AgentModeOption } from '@/renderer/utils/model/agentTypes';
@@ -71,6 +73,39 @@ export function buildAssistantModelInfo(models: string[]): AcpModelInfo | null {
   return null;
 }
 
+function buildCodexNativeModelInfo(models: CodexNativeModel[]): AcpModelInfo | null {
+  if (models.length === 0) return null;
+  const current = models.find((model) => model.isDefault) ?? models[0];
+  return {
+    current_model_id: current.model,
+    current_model_label: current.displayName,
+    available_models: models.map((model) => ({
+      id: model.model,
+      label: model.displayName,
+      description: model.description,
+    })),
+  };
+}
+
+function buildCodexNativeThoughtLevelOption(
+  models: CodexNativeModel[],
+  selectedModel: string | null
+): AgentRuntimeDerivedOption | null {
+  const model =
+    models.find((candidate) => candidate.model === selectedModel) ?? models.find((candidate) => candidate.isDefault);
+  if (!model || model.supportedReasoningEfforts.length === 0) return null;
+  return {
+    id: 'codex-reasoning-effort',
+    category: 'thought_level',
+    currentValue: model.defaultReasoningEffort,
+    options: model.supportedReasoningEfforts.map((option) => ({
+      value: option.reasoningEffort,
+      label: option.reasoningEffort,
+      description: option.description,
+    })),
+  };
+}
+
 export function resolveAssistantSelectionKey(
   savedKey: string | undefined,
   assistants: Assistant[]
@@ -127,6 +162,7 @@ export const useGuidAssistantSelection = ({
   const [selectedThoughtLevelValue, _setSelectedThoughtLevelValue] = useState<string>('');
   const { assistants } = useCustomAgentsLoader();
   const managedAgentRuntimeCatalog = useManagedAgentRuntimeCatalog();
+  const [codexNativeModels, setCodexNativeModels] = useState<CodexNativeModel[]>([]);
 
   const setSelectedMode = useCallback(
     (mode: React.SetStateAction<string>, _options?: { persistPreference?: boolean }) => {
@@ -213,13 +249,35 @@ export const useGuidAssistantSelection = ({
   );
   const selectedAssistantId = selectedAssistant?.id ?? null;
   const selectedAssistantBackend = assistantRuntimeKey(selectedAssistant);
+  const isCodexNative = selectedAssistantBackend === 'codex-native';
+  useEffect(() => {
+    if (!isCodexNative) {
+      setCodexNativeModels([]);
+      return;
+    }
+    let cancelled = false;
+    void ipcBridge.codexNative.listModels
+      .invoke()
+      .then((models) => {
+        if (!cancelled) setCodexNativeModels(models);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setCodexNativeModels([]);
+          console.error('[Guid] Failed to load native Codex models:', error);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCodexNative]);
   const selectedAssistantModels = selectedAssistant?.models ?? [];
   const selectedManagedAgentRuntimeCatalog = useMemo(
     () =>
-      selectedAssistant?.agent_id
+      !isCodexNative && selectedAssistant?.agent_id
         ? managedAgentRuntimeCatalog.find((agent) => agent.id === selectedAssistant.agent_id)
         : undefined,
-    [managedAgentRuntimeCatalog, selectedAssistant?.agent_id]
+    [isCodexNative, managedAgentRuntimeCatalog, selectedAssistant?.agent_id]
   );
   const selectedAgentRuntimeModelInfo = useMemo(
     () => buildAgentRuntimeModelInfo(selectedManagedAgentRuntimeCatalog),
@@ -234,8 +292,11 @@ export const useGuidAssistantSelection = ({
     [selectedManagedAgentRuntimeCatalog]
   );
   const selectedAgentRuntimeThoughtLevelOption = useMemo(
-    () => buildAgentRuntimeThoughtLevelOption(selectedManagedAgentRuntimeCatalog),
-    [selectedManagedAgentRuntimeCatalog]
+    () =>
+      isCodexNative
+        ? buildCodexNativeThoughtLevelOption(codexNativeModels, selectedAcpModel)
+        : buildAgentRuntimeThoughtLevelOption(selectedManagedAgentRuntimeCatalog),
+    [codexNativeModels, isCodexNative, selectedAcpModel, selectedManagedAgentRuntimeCatalog]
   );
   const currentThoughtLevelOption = useMemo<AgentRuntimeDerivedOption | null>(() => {
     if (!selectedAgentRuntimeThoughtLevelOption) return null;
@@ -252,13 +313,18 @@ export const useGuidAssistantSelection = ({
 
   const modelSelectionScopeRef = useRef<string | null>(null);
   useEffect(() => {
+    const codexNativeModelInfo = isCodexNative ? buildCodexNativeModelInfo(codexNativeModels) : null;
     const runtimeModelId =
-      selectedAgentRuntimeModelInfo?.current_model_id || selectedAgentRuntimeModelInfo?.available_models[0]?.id;
+      codexNativeModelInfo?.current_model_id ||
+      selectedAgentRuntimeModelInfo?.current_model_id ||
+      selectedAgentRuntimeModelInfo?.available_models[0]?.id;
     const fallbackModelId =
       runtimeModelId ||
       (selectedAssistantModels.length > 0 ? resolveInitialAssistantModel(selectedAssistantModels) : null);
     const availableModelIds = new Set(
-      selectedAgentRuntimeModelInfo?.available_models.map((model) => model.id) ?? selectedAssistantModels
+      codexNativeModelInfo?.available_models.map((model) => model.id) ??
+        selectedAgentRuntimeModelInfo?.available_models.map((model) => model.id) ??
+        selectedAssistantModels
     );
     const selectionScope = selectedAssistantId ?? '';
 
@@ -276,7 +342,7 @@ export const useGuidAssistantSelection = ({
 
       return fallbackModelId;
     });
-  }, [selectedAssistantId, selectedAssistantModels, selectedAgentRuntimeModelInfo]);
+  }, [codexNativeModels, isCodexNative, selectedAssistantId, selectedAssistantModels, selectedAgentRuntimeModelInfo]);
 
   useEffect(() => {
     const fallbackMode =
@@ -310,12 +376,15 @@ export const useGuidAssistantSelection = ({
   }, [selectedAgentRuntimeThoughtLevelOption, selectedAssistantId]);
 
   const currentAcpCachedModelInfo = useMemo(() => {
+    if (isCodexNative) {
+      return buildCodexNativeModelInfo(codexNativeModels);
+    }
     if (selectedAgentRuntimeModelInfo) {
       return selectedAgentRuntimeModelInfo;
     }
 
     return buildAssistantModelInfo(selectedAssistantModels);
-  }, [selectedAssistantModels, selectedAgentRuntimeModelInfo]);
+  }, [codexNativeModels, isCodexNative, selectedAssistantModels, selectedAgentRuntimeModelInfo]);
 
   const defaultAssistantId = useMemo(() => pickDefaultAssistantSelectionKey(assistants), [assistants]);
 

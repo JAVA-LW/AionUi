@@ -1,5 +1,18 @@
 {
   "sendbox": {},
+  "subagents": {
+    "title": "Sub-agents",
+    "running": "Running",
+    "completed": "Completed",
+    "started": "Started",
+    "back": "Back",
+    "send": "Send",
+    "empty": "No sub-agents",
+    "noMessages": "No messages yet",
+    "replyPlaceholder": "Reply to this sub-agent...",
+    "parentControlled": "This sub-agent is controlled by its parent task.",
+    "openFullConversation": "Open full conversation"
+  },
   "network": {
     "cloudflare_blocked": "Cloudflareの保護により{{service}}へのアクセスがブロックされました。対処: 1) VPN を利用 2) ネットワークを切替 3) 時間をおいて再試行 4) 別の AI サービスへ切替",
     "network_timeout": "ネットワークがタイムアウトしました。接続を自動的に再試行しています...",

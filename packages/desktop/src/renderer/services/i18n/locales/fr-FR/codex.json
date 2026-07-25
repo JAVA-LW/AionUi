@@ -1,5 +1,18 @@
 {
   "sendbox": {},
+  "subagents": {
+    "title": "Sub-agents",
+    "running": "Running",
+    "completed": "Completed",
+    "started": "Started",
+    "back": "Back",
+    "send": "Send",
+    "empty": "No sub-agents",
+    "noMessages": "No messages yet",
+    "replyPlaceholder": "Reply to this sub-agent...",
+    "parentControlled": "This sub-agent is controlled by its parent task.",
+    "openFullConversation": "Open full conversation"
+  },
   "network": {
     "cloudflare_blocked": "La protection Cloudflare a bloqué l'accès à {{service}}. Suggestions : 1) Utiliser un VPN 2) Changer de réseau 3) Réessayer plus tard 4) Passer à d'autres services IA",
     "network_timeout": "Délai réseau dépassé, reconnexion automatique en cours...",

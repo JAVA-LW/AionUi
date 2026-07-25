@@ -112,6 +112,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
     const assistantConversationId = selectedAssistantId;
     const assistantBackend = selectedAssistantBackend;
+    const isCodexNative = assistantBackend === 'codex-native';
     const enabled_skills_to_send = guidEnabledSkills ?? assistantDefaultSkillIds;
     const excludeBuiltinSkills = guidDisabledBuiltinSkills ?? assistantDefaultDisabledBuiltinSkillIds;
     const selectedAllMcpServerIds = selectedMcpServerIds ?? [];
@@ -142,14 +143,16 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
 
     const assistantOverrideModel =
       selectedAcpModel || currentAcpCachedModelInfo?.current_model_id || current_model?.use_model || undefined;
-    const assistantOverrides = {
-      model: assistantOverrideModel,
-      permission: selectedMode || undefined,
-      thought_level: selectedThoughtLevelValue || undefined,
-      skill_ids: enabled_skills_to_send,
-      disabled_builtin_skill_ids: excludeBuiltinSkills,
-      mcp_ids: assistantOverrideMcpIds,
-    };
+    const assistantOverrides = isCodexNative
+      ? {}
+      : {
+          model: assistantOverrideModel,
+          permission: selectedMode || undefined,
+          thought_level: selectedThoughtLevelValue || undefined,
+          skill_ids: enabled_skills_to_send,
+          disabled_builtin_skill_ids: excludeBuiltinSkills,
+          mcp_ids: assistantOverrideMcpIds,
+        };
 
     if (assistantBackend === 'aionrs') {
       if (!current_model) {
@@ -218,9 +221,19 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
           workspace: finalWorkspace,
           custom_workspace: isCustomWorkspace,
           default_files: files,
-          selected_mcp_server_ids: selectedUserMcpServerIdsToSend,
-          selected_session_mcp_servers:
-            selectedMcpServerIds !== undefined ? selectedSessionMcpServers : selectedSessionMcpServersToSend,
+          ...(isCodexNative
+            ? {
+                codex_model: assistantOverrideModel,
+                codex_reasoning_effort: selectedThoughtLevelValue || undefined,
+              }
+            : {}),
+          ...(isCodexNative
+            ? {}
+            : {
+                selected_mcp_server_ids: selectedUserMcpServerIdsToSend,
+                selected_session_mcp_servers:
+                  selectedMcpServerIds !== undefined ? selectedSessionMcpServers : selectedSessionMcpServersToSend,
+              }),
         },
       });
       if (!conversation || !conversation.id) {

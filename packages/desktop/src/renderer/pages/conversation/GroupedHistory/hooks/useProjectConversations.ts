@@ -84,6 +84,7 @@ export const useProjectConversations = () => {
         limit: PROJECT_PAGE_SIZE,
         cursor,
         pinned: false,
+        codex_root_only: true,
       });
       const items = filterVisibleConversations(result?.items ?? []);
       setPages((previous) => ({
@@ -144,6 +145,7 @@ export const useProjectConversations = () => {
           workspace,
           limit: targetCount,
           pinned: false,
+          codex_root_only: true,
         });
         setPages((previous) => ({
           ...previous,
